@@ -36,6 +36,7 @@ class ChatView(QScrollArea):
 
     def clear_messages(self, note=None):
         for row in self.rows:
+            row.setParent(None)
             row.deleteLater()
         self.rows = []
         self.placeholder.setText(note or "Здесь появятся его фразы")
@@ -58,7 +59,9 @@ class ChatView(QScrollArea):
         self.col.addWidget(row)
         self.rows.append(row)
         while len(self.rows) > MAX_MESSAGES:
-            self.rows.pop(0).deleteLater()
+            old = self.rows.pop(0)
+            old.setParent(None)
+            old.deleteLater()
         QTimer.singleShot(0, self.to_bottom)
         return row
 

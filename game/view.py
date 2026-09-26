@@ -130,7 +130,7 @@ def draw_clouds(p, f, world, t):
         u = (c.x * CLOUD_PAR + t * 0.25 - f.cam_x * CLOUD_PAR) % span - 6
         x = f.rect.left() + u * f.ppm
         y = f.rect.top() + f.h * (0.42 - c.y / 30.0)
-        s = c.size * f.ppm * 0.5
+        s = c.size * f.ppm * 0.3
         for dx, dy, k in ((-0.9, 0.15, 0.7), (0.0, 0.0, 1.0), (0.95, 0.12, 0.75), (0.4, -0.35, 0.7)):
             p.setBrush(qc(tint, alpha))
             p.drawEllipse(QPointF(x + dx * s, y + dy * s), s * k * 1.25, s * k * 0.8)

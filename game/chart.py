@@ -69,6 +69,8 @@ class Sparkline(QWidget):
 def time_label(seconds):
     if seconds >= 3600:
         return f"{seconds / 3600:.1f} ч".replace(".", ",")
+    if seconds < 120:
+        return f"{round(seconds)} с"
     return f"{round(seconds / 60)} мин"
 
 

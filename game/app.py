@@ -412,8 +412,9 @@ class GalleryPage(Page):
             lay.addWidget(pic)
             title = f"{e['world']} · {e['human']}" + ("  (сейчас)" if e["id"] == current else "")
             lay.addWidget(label(title, "section"))
-            lay.addWidget(label(f"прожил {clock(e.get('lived', 0))} · {int(e.get('phrases', 0))} фраз · "
-                                f"интересность {e.get('interest', 0):.2f}", "hint"))
+            n_ph = int(e.get("phrases", 0))
+            lay.addWidget(label(f"прожил {clock(e.get('lived', 0))} · {n_ph} {plural(n_ph, 'фраза', 'фразы', 'фраз')}"
+                                f" · интересность {e.get('interest', 0):.2f}", "hint"))
             row = QHBoxLayout()
             row.addWidget(button("Открыть", "primary", lambda _=False, i_=e["id"]: self.open_entry(i_)))
             row.addWidget(button("Удалить", "danger", lambda _=False, i_=e["id"]: self.delete_entry(i_)))

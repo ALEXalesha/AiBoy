@@ -1,10 +1,11 @@
 """Сводка того, что мозг видит и чего хочет, - вход речи.
 
 Не скрытое состояние рекуррентного слоя: оно меняется, пока мозг учится на ходу, и речь,
-обученная при сборке, перестала бы его понимать. Сводка - 27 понятных чисел от 0 до 1
+обученная при сборке, перестала бы его понимать. Сводка - 31 понятное число от 0 до 1
 (сторона и направление - от -1 до 1): холмы и ямы справа и слева, ровно ли вокруг,
 ближайшая сущность (вид, сторона, расстояние, цвет), желания идти и прыгать, любопытство,
-на земле ли, упал ли недавно, скорость, ночь, куда смотрит.
+на земле ли, упал ли недавно, скорость, ночь, куда смотрит; и гитара: играет ли, учит ли
+мелодию, получилось ли только что, не выходит ли.
 """
 import colorsys
 
@@ -17,14 +18,14 @@ FIELDS = (("hill_right", "hill_left", "pit_right", "pit_left", "flat")
           + tuple(f"kind_{k}" for k in KINDS)
           + ("entity", "entity_side", "entity_dist", "hue_cos", "hue_sin", "sat", "val",
              "want_dir", "want_jump", "curiosity", "grounded", "fell", "speed", "airborne",
-             "night", "facing"))
+             "night", "facing", "playing", "learning_tune", "got_it", "failing"))
 STATE_DIM = len(FIELDS)
 IDX = {name: i for i, name in enumerate(FIELDS)}
 LOOK = 8.0            # м - холмы и ямы
 SEE = 12.0            # м - сущности
 
 
-def summarize(human, world, want_dir, want_jump, curiosity, fell):
+def summarize(human, world, want_dir, want_jump, curiosity, fell, music=None):
     s = np.zeros(STATE_DIM, np.float32)
     x = human.px
     g0 = world.height_at(x)
@@ -55,4 +56,6 @@ def summarize(human, world, want_dir, want_jump, curiosity, fell):
     s[IDX["airborne"]] = 1.0 if (not human.grounded and human.py - g0 - human.body.leg() > 0.3) else 0.0
     s[IDX["night"]] = 1.0 if getattr(world, "night", False) else 0.0
     s[IDX["facing"]] = human.facing
+    for k, v in (music or {}).items():
+        s[IDX[k]] = v
     return s

@@ -92,6 +92,7 @@ class StringBank:
     def __init__(self):
         self.cache = {}
         self.lock = threading.Lock()
+        self.warming = False
 
     def sample(self, string, fret, force, muted=False):
         key = (string, fret, force, bool(muted))
@@ -134,3 +135,14 @@ class StringBank:
         if peak > LIMIT:
             out *= np.float32(LIMIT * 0.999 / peak)
         return out
+
+
+_shared = None
+
+
+def shared_bank():
+    """Один кэш на процесс: окон может быть несколько (тесты), струны у всех одни."""
+    global _shared
+    if _shared is None:
+        _shared = StringBank()
+    return _shared

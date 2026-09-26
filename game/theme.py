@@ -138,6 +138,16 @@ QComboBox {{
     min-width: 150px;
 }}
 QComboBox:hover {{ border-color: {p['accent']}; }}
+QLineEdit, QSpinBox {{
+    background: {p['surface2']};
+    border: 1px solid {p['border']};
+    border-radius: 8px;
+    padding: 6px 10px;
+    color: {p['text']};
+    selection-background-color: {p['accent']};
+}}
+QLineEdit:focus, QSpinBox:focus {{ border-color: {p['accent']}; }}
+QSpinBox::up-button, QSpinBox::down-button {{ width: 18px; border: none; background: transparent; }}
 QComboBox::drop-down {{ border: none; width: 22px; }}
 QComboBox QAbstractItemView {{
     background: {p['surface']};

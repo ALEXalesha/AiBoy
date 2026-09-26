@@ -3,6 +3,8 @@
 Человек здесь только смотрит: мир, человечка и его фразы придумывают сети, окно их
 рисует, сохраняет галерею, статистику и веса мозга.
 """
+import os
+import threading
 import time
 
 import numpy as np
@@ -10,7 +12,7 @@ from PySide6.QtCore import QElapsedTimer, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QFrame, QGridLayout,
                                QHBoxLayout, QHeaderView, QLabel, QMainWindow, QMessageBox, QPushButton,
-                               QScrollArea, QStackedWidget, QTableWidget, QTableWidgetItem,
+                               QScrollArea, QSlider, QStackedWidget, QTableWidget, QTableWidgetItem,
                                QVBoxLayout, QWidget)
 
 import paths
@@ -27,6 +29,10 @@ from game.version import VERSION
 from game.view import WorldView, draw_scene, thumbnail
 from game.window_state import WindowMemory
 from game.ui import Page, button, card, label, meters, plural, segmented
+from game.audio import AudioOut
+from game.keyboard import KeyboardPage
+from music.songbook import Songbook
+from music.string import shared_bank
 from body.cppn import generate_body
 from world.generate import world_name
 from world.interest import score as interest_score
@@ -44,7 +50,8 @@ ABOUT = ("Этот мир и человечка в нём придумали н�
          "Его мысли появляются в чате сверху,\n"
          "а миры и человечки сохраняются в галерее.")
 RECENT_NAMES = 12             # столько последних миров не повторяют имя нового
-PAGES = (("observe", "Наблюдение"), ("gallery", "Галерея"), ("stats", "Статистика"), ("settings", "Настройки"))
+PAGES = (("observe", "Наблюдение"), ("gallery", "Галерея"), ("teach", "Научить мелодии"), ("stats", "Статистика"),
+         ("settings", "Настройки"))
 
 
 # --- меню ---
@@ -674,10 +681,22 @@ class SettingsPage(Page):
         row(3, "Тема", "Тёмная или светлая рамка вокруг мира", self.theme)
         self.size = self.combo(SIZE_NAMES, s.world_size, "world_size")
         row(4, "Размер мира", "Ширина новых миров; мир - кольцо, края нет", self.size)
+        self.volume = QSlider(Qt.Orientation.Horizontal)
+        self.volume.setRange(0, 100)
+        self.volume.setValue(s.volume)
+        self.volume_label = label(f"{s.volume}%")
+        self.volume_label.setMinimumWidth(48)
+        self.volume.valueChanged.connect(self.on_volume)
+        row(6, "Громкость", "Гитара и другие игрушки; 0 - звуковое устройство не открывается вовсе. "
+            "Голоса у человечка нет", self.volume, self.volume_label)
         outer.addWidget(box)
         outer.addWidget(label("Всё сохраняется сразу.", "hint"))
         outer.addStretch(1)
         outer.addWidget(label(f"AiBoy {VERSION} · все сети свои, на numpy", "hint"))
+
+    def on_volume(self, v):
+        self.volume_label.setText(f"{v}%")
+        self.window_.change_setting("volume", v)
 
     def combo(self, options, value, setting):
         c = QComboBox()
@@ -708,6 +727,14 @@ class MainWindow(QMainWindow):
         self.models = models.load()
         self.brain, self.brain_from_user = models.user_brain(self.brain_path)
         self.last_brain_save = time.monotonic()
+        self.songbook = Songbook.load(paths.user_file("songbook.json"))
+        self.audio = AudioOut(self.settings.volume)
+        self.bank = shared_bank()
+        # звук струн - в фоне, пока человек смотрит меню: первая попытка уже не ждёт синтеза.
+        # Без экрана (тесты, самопроверка) - по требованию: нота синтезируется за 10 мс
+        if not self.bank.warming and os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+            self.bank.warming = True
+            threading.Thread(target=self.bank.warm, daemon=True).start()
 
         root = QWidget()
         root.setObjectName("root")
@@ -737,8 +764,9 @@ class MainWindow(QMainWindow):
         self.gallery_page = GalleryPage(self)
         self.stats_page = StatsPage(self)
         self.settings_page = SettingsPage(self)
+        self.teach_page = KeyboardPage(self)
         self.pages = {"menu": self.menu, "observe": self.observe, "gallery": self.gallery_page,
-                      "stats": self.stats_page, "settings": self.settings_page}
+                      "teach": self.teach_page, "stats": self.stats_page, "settings": self.settings_page}
         for page in self.pages.values():
             self.stack.addWidget(page)
         self.apply_theme(self.settings.theme)
@@ -805,6 +833,8 @@ class MainWindow(QMainWindow):
             self.observe.view.update()
         elif name == "speed":
             self.observe.set_speed(value)
+        elif name == "volume":
+            self.audio.set_volume(value)
 
     def apply_theme(self, name):
         self.setStyleSheet(theme.qss(name))

@@ -19,7 +19,7 @@ def m():
 
 def test_every_model_is_trained_and_has_a_passport(m):
     assert all(m.trained.values()), m.trained
-    for name in ("world", "body", "speech", "voice", "brain"):
+    for name in ("world", "body", "speech", "brain"):
         assert models.passport(name), name
 
 
@@ -90,21 +90,12 @@ def test_speech_differs_for_different_states(m):
     assert sum("справа" in p or "повыше" in p for p in hill) >= 5
 
 
-def test_voice_follows_its_teacher(m):
-    """На состояниях из настоящей жизни (как при обучении, но других миров)."""
-    from teacher import voice as tv
-    from train.speech import collect_states
-    rng = np.random.default_rng(5)
-    s = collect_states(300, seed=9, log=lambda *a: None)
-    err = np.mean([(m.voice.params_for(x) - tv.target(x, rng, noise=0.0)) ** 2 for x in s])
-    assert err < 0.02
-
-
 def test_starter_brain_passport_is_honest(m):
     brain = models.starter_brain()
     pp = models.passport("brain")["honest_training_time"]
     assert brain.steps == pp["brain_steps"] > 0
-    assert pp["lived_hours"] == pytest.approx(brain.steps / 30 / 3600, abs=0.01)
+    assert pp["lived_hours_online"] == pytest.approx(brain.steps / 30 / 3600, abs=0.01)
+    assert pp["es_generations"] > 0 and pp["es_minutes"] > 0
 
 
 def test_starter_brain_moves_in_part_of_the_worlds(m):
@@ -116,3 +107,44 @@ def test_starter_brain_moves_in_part_of_the_worlds(m):
         run_steps(brain, h, w, 900, learn=False)
         moved += abs(h.px - 80.0) > 1.0
     assert moved >= 2
+
+
+def test_no_world_has_a_trap(m):
+    """Закон мира: из любой точки можно попасть во весь мир шагом или прыжком - на 60 новых
+    зёрнах, ни одной ямы-ловушки."""
+    from world import reach
+    for seed in range(20_000, 20_060):
+        w = generate(m.world_genome, seed, 160.0)
+        assert reach.traps(w) == [], seed
+
+
+# Пороги законов поведения - по замеру стартового мозга при сборке (README, «Замеры»):
+# первая сборка разворачивалась 577 раз в минуту, суставы дёргались назад в 15 % кадров,
+# средний |изменение угла| - 0.082 рад за кадр.
+CALM = {"turns_per_min": 10.0, "jitter": 0.08, "dangle": 0.04}
+MOVES_M_PER_MIN = 12.0
+
+
+@pytest.fixture(scope="module")
+def behaviour(m):
+    from game import probe
+    return probe.summary(m, models.starter_brain, [(30_000 + i, 31_000 + i) for i in range(6)], 60, learn=True)
+
+
+def test_starter_brain_is_calm_in_the_game(behaviour):
+    s, rows = behaviour
+    for key, limit in CALM.items():
+        assert s[key] <= limit, (key, s[key], [r[key] for r in rows])
+
+
+def test_starter_brain_still_walks_somewhere(behaviour):
+    s, rows = behaviour
+    assert s["displacement_m"] >= MOVES_M_PER_MIN, [round(r["displacement_m"], 1) for r in rows]
+    assert s["moved_over_2m"] >= 5
+
+
+def test_starter_brain_climbs_out_of_the_worst_hollow(m):
+    """Со дна самой глубокой впадины мира выбирается за 30 с игры - в 90 % миров и больше."""
+    from game import probe
+    got = [probe.escape(m, models.starter_brain, 40_000 + i, 41_000 + i, 30)[0] for i in range(20)]
+    assert sum(got) >= 18, got

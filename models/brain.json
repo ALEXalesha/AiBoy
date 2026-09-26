@@ -1,705 +1,1347 @@
 {
- "what": "стартовые веса мозга: рекуррентный слой 46 -> 64, головы суставов, прыжка, критика и разговора, предсказатель 58 -> 96 -> 46",
- "how": "то же онлайн-обучение, что в игре (любопытство, актёр-критик), в череде миров; каждые 40 миров снимок весов проверялся на 5 отдельных мирах по 30 с (сдвиг с места без обучения), в models взят лучший снимок",
+ "what": "стартовые веса мозга: рекуррентный слой 48 -> 64, головы суставов, прыжка, критика и «сказать», предсказатель 60 -> 96 -> 48",
+ "how": "1) эволюционная стратегия (train/es.py) по весам актёра: счёт эпизода - сколько нового мира он увидел (размах пройденного), выбрался ли из самой глубокой впадины, минус развороты, дёрганье, падения и прыжки; каждые 25 поколений снимок проверялся в условиях игры, взят лучший; 2) онлайн-обучение предсказателя и критика с замороженным актёром; в игре учится всё (актёр - с шагом в PLAY_LR раз меньше)",
  "honest_training_time": {
-  "wall_minutes": 12.0,
-  "brain_steps": 666000,
-  "lived_hours": 6.17,
-  "worlds": 360,
-  "world_seconds_each": 60.0,
-  "whole_run_brain_steps": 1042200,
-  "whole_run_worlds": 579
+  "es_minutes": 12.0,
+  "es_generations": 197,
+  "es_generation_chosen": 175,
+  "es_episodes": 18912,
+  "es_lived_hours": 63.04,
+  "online_minutes": 3.0,
+  "online_worlds": 143,
+  "brain_steps": 257400,
+  "lived_hours_online": 2.38,
+  "wall_minutes": 15.1
+ },
+ "es": {
+  "pairs": 16,
+  "sigma": 0.03,
+  "lr": 0.03,
+  "episode_s": 12.0,
+  "jump_cost_m": 1.0,
+  "jitter_cost": 60.0,
+  "hollow_bonus_m": 8.0,
+  "started_from": "мозг прошлой эволюции (15 минут, 316 поколений, без цены прыжка: выбирался из 30 впадин из 30, но прыгал 28 раз в минуту)"
  },
  "snapshots": [
   {
-   "world": 40,
-   "steps": 72000,
-   "displacement_m": 11.07
+   "turns_per_min": 2.8,
+   "jitter": 0.094,
+   "dangle": 0.0273,
+   "odometer_m": 43.2311,
+   "displacement_m": 23.285,
+   "jumps": 13.4,
+   "falls": 0.0,
+   "worlds": 5,
+   "moved_over_2m": 5,
+   "score": 29.67,
+   "generation": 25,
+   "escaped": 5
   },
   {
-   "world": 80,
-   "steps": 144000,
-   "displacement_m": 26.44
+   "turns_per_min": 0.0,
+   "jitter": 0.0951,
+   "dangle": 0.0272,
+   "odometer_m": 46.1931,
+   "displacement_m": 23.7229,
+   "jumps": 13.8,
+   "falls": 0.0,
+   "worlds": 5,
+   "moved_over_2m": 5,
+   "score": 30.78,
+   "generation": 50,
+   "escaped": 5
   },
   {
-   "world": 120,
-   "steps": 216000,
-   "displacement_m": 3.02
+   "turns_per_min": 0.0,
+   "jitter": 0.0805,
+   "dangle": 0.0304,
+   "odometer_m": 56.9873,
+   "displacement_m": 33.3569,
+   "jumps": 13.0,
+   "falls": 0.0,
+   "worlds": 5,
+   "moved_over_2m": 5,
+   "score": 41.24,
+   "generation": 75,
+   "escaped": 5
   },
   {
-   "world": 160,
-   "steps": 288000,
-   "displacement_m": 13.26
+   "turns_per_min": 0.8,
+   "jitter": 0.0734,
+   "dangle": 0.0322,
+   "odometer_m": 62.128,
+   "displacement_m": 35.1109,
+   "jumps": 11.2,
+   "falls": 0.0,
+   "worlds": 5,
+   "moved_over_2m": 5,
+   "score": 43.57,
+   "generation": 100,
+   "escaped": 5
   },
   {
-   "world": 200,
-   "steps": 360000,
-   "displacement_m": 5.35
+   "turns_per_min": 0.0,
+   "jitter": 0.0704,
+   "dangle": 0.0281,
+   "odometer_m": 61.9999,
+   "displacement_m": 34.2116,
+   "jumps": 9.6,
+   "falls": 0.0,
+   "worlds": 5,
+   "moved_over_2m": 5,
+   "score": 40.52,
+   "generation": 125,
+   "escaped": 4
   },
   {
-   "world": 240,
-   "steps": 432000,
-   "displacement_m": 5.29
+   "turns_per_min": 0.0,
+   "jitter": 0.0689,
+   "dangle": 0.0293,
+   "odometer_m": 65.2355,
+   "displacement_m": 36.3215,
+   "jumps": 10.0,
+   "falls": 0.0,
+   "worlds": 5,
+   "moved_over_2m": 5,
+   "score": 45.57,
+   "generation": 150,
+   "escaped": 5
   },
   {
-   "world": 280,
-   "steps": 504000,
-   "displacement_m": 4.12
+   "turns_per_min": 0.0,
+   "jitter": 0.0651,
+   "dangle": 0.0347,
+   "odometer_m": 71.648,
+   "displacement_m": 45.876,
+   "jumps": 10.6,
+   "falls": 0.0,
+   "worlds": 5,
+   "moved_over_2m": 5,
+   "score": 55.09,
+   "generation": 175,
+   "escaped": 5
+  }
+ ],
+ "curve": [
+  {
+   "generation": 1,
+   "score": 7.445,
+   "seen_m": 12.98,
+   "turns": 0.135,
+   "jitter": 0.064,
+   "jumps": 5.979,
+   "escaped": 0.812
   },
   {
-   "world": 320,
-   "steps": 576000,
-   "displacement_m": 4.52
+   "generation": 3,
+   "score": 1.123,
+   "seen_m": 9.243,
+   "turns": 0.271,
+   "jitter": 0.068,
+   "jumps": 5.896,
+   "escaped": 0.375
   },
   {
-   "world": 360,
-   "steps": 648000,
-   "displacement_m": 38.61
+   "generation": 5,
+   "score": 0.987,
+   "seen_m": 9.423,
+   "turns": 0.458,
+   "jitter": 0.077,
+   "jumps": 5.74,
+   "escaped": 0.406
   },
   {
-   "world": 400,
-   "steps": 720000,
-   "displacement_m": 6.27
+   "generation": 7,
+   "score": 3.861,
+   "seen_m": 11.106,
+   "turns": 0.01,
+   "jitter": 0.079,
+   "jumps": 5.979,
+   "escaped": 0.656
   },
   {
-   "world": 440,
-   "steps": 792000,
-   "displacement_m": 3.21
+   "generation": 9,
+   "score": 1.561,
+   "seen_m": 8.968,
+   "turns": 0.0,
+   "jitter": 0.078,
+   "jumps": 5.552,
+   "escaped": 0.531
   },
   {
-   "world": 480,
-   "steps": 864000,
-   "displacement_m": 5.97
+   "generation": 11,
+   "score": 6.169,
+   "seen_m": 13.088,
+   "turns": 0.583,
+   "jitter": 0.1,
+   "jumps": 5.969,
+   "escaped": 1.0
   },
   {
-   "world": 520,
-   "steps": 936000,
-   "displacement_m": 4.59
+   "generation": 13,
+   "score": -1.91,
+   "seen_m": 7.771,
+   "turns": 1.385,
+   "jitter": 0.094,
+   "jumps": 5.708,
+   "escaped": 0.438
   },
   {
-   "world": 560,
-   "steps": 1008000,
-   "displacement_m": 3.88
+   "generation": 15,
+   "score": -3.415,
+   "seen_m": 6.798,
+   "turns": 0.26,
+   "jitter": 0.093,
+   "jumps": 5.677,
+   "escaped": 0.219
   },
   {
-   "world": 579,
-   "steps": 1042200,
-   "displacement_m": 2.29
+   "generation": 17,
+   "score": -1.041,
+   "seen_m": 7.595,
+   "turns": 0.208,
+   "jitter": 0.098,
+   "jumps": 5.656,
+   "escaped": 0.562
+  },
+  {
+   "generation": 19,
+   "score": -1.428,
+   "seen_m": 7.971,
+   "turns": 0.021,
+   "jitter": 0.092,
+   "jumps": 5.635,
+   "escaped": 0.328
+  },
+  {
+   "generation": 21,
+   "score": -3.178,
+   "seen_m": 6.741,
+   "turns": 0.375,
+   "jitter": 0.093,
+   "jumps": 5.49,
+   "escaped": 0.25
+  },
+  {
+   "generation": 23,
+   "score": 1.497,
+   "seen_m": 9.152,
+   "turns": 0.094,
+   "jitter": 0.088,
+   "jumps": 5.625,
+   "escaped": 0.641
+  },
+  {
+   "generation": 25,
+   "score": 0.549,
+   "seen_m": 8.506,
+   "turns": 0.354,
+   "jitter": 0.101,
+   "jumps": 5.552,
+   "escaped": 0.719
+  },
+  {
+   "generation": 27,
+   "score": 0.924,
+   "seen_m": 7.781,
+   "turns": 0.0,
+   "jitter": 0.091,
+   "jumps": 5.708,
+   "escaped": 0.812
+  },
+  {
+   "generation": 29,
+   "score": 3.158,
+   "seen_m": 9.985,
+   "turns": 0.021,
+   "jitter": 0.094,
+   "jumps": 5.427,
+   "escaped": 0.797
+  },
+  {
+   "generation": 31,
+   "score": -2.029,
+   "seen_m": 5.995,
+   "turns": 0.104,
+   "jitter": 0.09,
+   "jumps": 5.427,
+   "escaped": 0.531
+  },
+  {
+   "generation": 33,
+   "score": 1.339,
+   "seen_m": 8.409,
+   "turns": 0.0,
+   "jitter": 0.09,
+   "jumps": 5.562,
+   "escaped": 0.734
+  },
+  {
+   "generation": 35,
+   "score": -5.825,
+   "seen_m": 5.546,
+   "turns": 0.344,
+   "jitter": 0.105,
+   "jumps": 5.594,
+   "escaped": 0.125
+  },
+  {
+   "generation": 37,
+   "score": 1.441,
+   "seen_m": 9.18,
+   "turns": 0.198,
+   "jitter": 0.103,
+   "jumps": 5.708,
+   "escaped": 0.797
+  },
+  {
+   "generation": 39,
+   "score": 0.32,
+   "seen_m": 8.426,
+   "turns": 0.167,
+   "jitter": 0.093,
+   "jumps": 5.677,
+   "escaped": 0.609
+  },
+  {
+   "generation": 41,
+   "score": 0.681,
+   "seen_m": 7.977,
+   "turns": 0.0,
+   "jitter": 0.09,
+   "jumps": 5.583,
+   "escaped": 0.688
+  },
+  {
+   "generation": 43,
+   "score": 0.501,
+   "seen_m": 8.161,
+   "turns": 0.0,
+   "jitter": 0.094,
+   "jumps": 5.365,
+   "escaped": 0.625
+  },
+  {
+   "generation": 45,
+   "score": -2.616,
+   "seen_m": 6.599,
+   "turns": 0.094,
+   "jitter": 0.1,
+   "jumps": 5.323,
+   "escaped": 0.406
+  },
+  {
+   "generation": 47,
+   "score": 2.756,
+   "seen_m": 9.843,
+   "turns": 0.0,
+   "jitter": 0.097,
+   "jumps": 5.583,
+   "escaped": 0.812
+  },
+  {
+   "generation": 49,
+   "score": 2.496,
+   "seen_m": 10.114,
+   "turns": 0.052,
+   "jitter": 0.101,
+   "jumps": 5.792,
+   "escaped": 0.797
+  },
+  {
+   "generation": 51,
+   "score": 1.343,
+   "seen_m": 9.078,
+   "turns": 0.062,
+   "jitter": 0.1,
+   "jumps": 5.51,
+   "escaped": 0.719
+  },
+  {
+   "generation": 53,
+   "score": 4.291,
+   "seen_m": 10.783,
+   "turns": 0.0,
+   "jitter": 0.098,
+   "jumps": 5.219,
+   "escaped": 0.859
+  },
+  {
+   "generation": 55,
+   "score": 5.417,
+   "seen_m": 11.408,
+   "turns": 0.0,
+   "jitter": 0.088,
+   "jumps": 5.573,
+   "escaped": 0.906
+  },
+  {
+   "generation": 57,
+   "score": 2.447,
+   "seen_m": 9.821,
+   "turns": 0.021,
+   "jitter": 0.092,
+   "jumps": 5.854,
+   "escaped": 0.75
+  },
+  {
+   "generation": 59,
+   "score": 2.197,
+   "seen_m": 9.165,
+   "turns": 0.0,
+   "jitter": 0.082,
+   "jumps": 5.667,
+   "escaped": 0.688
+  },
+  {
+   "generation": 61,
+   "score": 5.713,
+   "seen_m": 11.671,
+   "turns": 0.0,
+   "jitter": 0.091,
+   "jumps": 5.49,
+   "escaped": 0.938
+  },
+  {
+   "generation": 63,
+   "score": 3.927,
+   "seen_m": 10.608,
+   "turns": 0.0,
+   "jitter": 0.091,
+   "jumps": 5.406,
+   "escaped": 0.781
+  },
+  {
+   "generation": 65,
+   "score": 2.611,
+   "seen_m": 9.048,
+   "turns": 0.0,
+   "jitter": 0.085,
+   "jumps": 5.406,
+   "escaped": 0.766
+  },
+  {
+   "generation": 67,
+   "score": 5.233,
+   "seen_m": 11.356,
+   "turns": 0.0,
+   "jitter": 0.091,
+   "jumps": 5.635,
+   "escaped": 0.938
+  },
+  {
+   "generation": 69,
+   "score": 5.715,
+   "seen_m": 11.372,
+   "turns": 0.0,
+   "jitter": 0.083,
+   "jumps": 5.667,
+   "escaped": 0.938
+  },
+  {
+   "generation": 71,
+   "score": 3.6,
+   "seen_m": 10.043,
+   "turns": 0.0,
+   "jitter": 0.083,
+   "jumps": 5.854,
+   "escaped": 0.828
+  },
+  {
+   "generation": 73,
+   "score": 7.958,
+   "seen_m": 13.363,
+   "turns": 0.0,
+   "jitter": 0.078,
+   "jumps": 5.708,
+   "escaped": 0.938
+  },
+  {
+   "generation": 75,
+   "score": 7.886,
+   "seen_m": 13.553,
+   "turns": 0.0,
+   "jitter": 0.084,
+   "jumps": 5.635,
+   "escaped": 0.938
+  },
+  {
+   "generation": 77,
+   "score": 5.918,
+   "seen_m": 11.479,
+   "turns": 0.0,
+   "jitter": 0.076,
+   "jumps": 5.781,
+   "escaped": 0.906
+  },
+  {
+   "generation": 79,
+   "score": 6.594,
+   "seen_m": 12.21,
+   "turns": 0.0,
+   "jitter": 0.074,
+   "jumps": 5.5,
+   "escaped": 0.812
+  },
+  {
+   "generation": 81,
+   "score": 5.217,
+   "seen_m": 11.486,
+   "turns": 0.083,
+   "jitter": 0.08,
+   "jumps": 5.427,
+   "escaped": 0.766
+  },
+  {
+   "generation": 83,
+   "score": 10.597,
+   "seen_m": 15.102,
+   "turns": 0.125,
+   "jitter": 0.071,
+   "jumps": 5.115,
+   "escaped": 0.953
+  },
+  {
+   "generation": 85,
+   "score": 7.588,
+   "seen_m": 13.356,
+   "turns": 0.021,
+   "jitter": 0.074,
+   "jumps": 5.26,
+   "escaped": 0.734
+  },
+  {
+   "generation": 87,
+   "score": 8.403,
+   "seen_m": 13.556,
+   "turns": 0.031,
+   "jitter": 0.07,
+   "jumps": 5.615,
+   "escaped": 0.875
+  },
+  {
+   "generation": 89,
+   "score": 4.1,
+   "seen_m": 8.44,
+   "turns": 0.0,
+   "jitter": 0.063,
+   "jumps": 5.167,
+   "escaped": 0.859
+  },
+  {
+   "generation": 91,
+   "score": 7.797,
+   "seen_m": 12.211,
+   "turns": 0.021,
+   "jitter": 0.066,
+   "jumps": 5.375,
+   "escaped": 0.922
+  },
+  {
+   "generation": 93,
+   "score": 7.872,
+   "seen_m": 12.745,
+   "turns": 0.021,
+   "jitter": 0.072,
+   "jumps": 5.188,
+   "escaped": 0.875
+  },
+  {
+   "generation": 95,
+   "score": 8.31,
+   "seen_m": 13.054,
+   "turns": 0.021,
+   "jitter": 0.067,
+   "jumps": 4.969,
+   "escaped": 0.812
+  },
+  {
+   "generation": 97,
+   "score": 6.545,
+   "seen_m": 11.108,
+   "turns": 0.0,
+   "jitter": 0.068,
+   "jumps": 4.969,
+   "escaped": 0.844
+  },
+  {
+   "generation": 99,
+   "score": 4.402,
+   "seen_m": 9.955,
+   "turns": 0.021,
+   "jitter": 0.069,
+   "jumps": 5.135,
+   "escaped": 0.703
+  },
+  {
+   "generation": 101,
+   "score": 7.17,
+   "seen_m": 12.692,
+   "turns": 0.0,
+   "jitter": 0.071,
+   "jumps": 5.24,
+   "escaped": 0.75
+  },
+  {
+   "generation": 103,
+   "score": 4.797,
+   "seen_m": 10.888,
+   "turns": 0.0,
+   "jitter": 0.067,
+   "jumps": 5.083,
+   "escaped": 0.562
+  },
+  {
+   "generation": 105,
+   "score": 7.699,
+   "seen_m": 13.214,
+   "turns": 0.156,
+   "jitter": 0.071,
+   "jumps": 4.938,
+   "escaped": 0.719
+  },
+  {
+   "generation": 107,
+   "score": 10.99,
+   "seen_m": 15.683,
+   "turns": 0.0,
+   "jitter": 0.078,
+   "jumps": 4.854,
+   "escaped": 0.922
+  },
+  {
+   "generation": 109,
+   "score": 7.599,
+   "seen_m": 12.192,
+   "turns": 0.031,
+   "jitter": 0.076,
+   "jumps": 4.417,
+   "escaped": 0.828
+  },
+  {
+   "generation": 111,
+   "score": 9.582,
+   "seen_m": 13.604,
+   "turns": 0.0,
+   "jitter": 0.082,
+   "jumps": 4.323,
+   "escaped": 0.984
+  },
+  {
+   "generation": 113,
+   "score": 6.733,
+   "seen_m": 11.347,
+   "turns": 0.0,
+   "jitter": 0.074,
+   "jumps": 4.219,
+   "escaped": 0.766
+  },
+  {
+   "generation": 115,
+   "score": 11.32,
+   "seen_m": 14.235,
+   "turns": 0.0,
+   "jitter": 0.073,
+   "jumps": 3.594,
+   "escaped": 0.953
+  },
+  {
+   "generation": 117,
+   "score": 9.15,
+   "seen_m": 14.185,
+   "turns": 0.021,
+   "jitter": 0.075,
+   "jumps": 4.906,
+   "escaped": 0.859
+  },
+  {
+   "generation": 119,
+   "score": 5.053,
+   "seen_m": 9.709,
+   "turns": 0.0,
+   "jitter": 0.071,
+   "jumps": 3.125,
+   "escaped": 0.516
+  },
+  {
+   "generation": 121,
+   "score": 6.087,
+   "seen_m": 10.814,
+   "turns": 0.042,
+   "jitter": 0.073,
+   "jumps": 3.896,
+   "escaped": 0.672
+  },
+  {
+   "generation": 123,
+   "score": 2.024,
+   "seen_m": 6.934,
+   "turns": 0.0,
+   "jitter": 0.063,
+   "jumps": 2.771,
+   "escaped": 0.312
+  },
+  {
+   "generation": 125,
+   "score": 3.885,
+   "seen_m": 8.303,
+   "turns": 0.01,
+   "jitter": 0.069,
+   "jumps": 3.188,
+   "escaped": 0.547
+  },
+  {
+   "generation": 127,
+   "score": 7.076,
+   "seen_m": 11.892,
+   "turns": 0.0,
+   "jitter": 0.071,
+   "jumps": 4.146,
+   "escaped": 0.672
+  },
+  {
+   "generation": 129,
+   "score": 4.057,
+   "seen_m": 10.166,
+   "turns": 0.021,
+   "jitter": 0.071,
+   "jumps": 4.021,
+   "escaped": 0.406
+  },
+  {
+   "generation": 131,
+   "score": 7.236,
+   "seen_m": 11.75,
+   "turns": 0.021,
+   "jitter": 0.07,
+   "jumps": 3.802,
+   "escaped": 0.672
+  },
+  {
+   "generation": 133,
+   "score": 9.99,
+   "seen_m": 13.515,
+   "turns": 0.094,
+   "jitter": 0.077,
+   "jumps": 3.521,
+   "escaped": 0.906
+  },
+  {
+   "generation": 135,
+   "score": 3.843,
+   "seen_m": 9.304,
+   "turns": 0.146,
+   "jitter": 0.075,
+   "jumps": 3.833,
+   "escaped": 0.547
+  },
+  {
+   "generation": 137,
+   "score": 7.623,
+   "seen_m": 11.937,
+   "turns": 0.365,
+   "jitter": 0.071,
+   "jumps": 3.844,
+   "escaped": 0.75
+  },
+  {
+   "generation": 139,
+   "score": 6.526,
+   "seen_m": 11.139,
+   "turns": 0.104,
+   "jitter": 0.068,
+   "jumps": 4.417,
+   "escaped": 0.75
+  },
+  {
+   "generation": 141,
+   "score": 2.075,
+   "seen_m": 9.209,
+   "turns": 0.344,
+   "jitter": 0.069,
+   "jumps": 4.385,
+   "escaped": 0.297
+  },
+  {
+   "generation": 143,
+   "score": 7.674,
+   "seen_m": 12.352,
+   "turns": 0.031,
+   "jitter": 0.073,
+   "jumps": 4.573,
+   "escaped": 0.812
+  },
+  {
+   "generation": 145,
+   "score": 6.083,
+   "seen_m": 10.321,
+   "turns": 0.073,
+   "jitter": 0.068,
+   "jumps": 3.76,
+   "escaped": 0.688
+  },
+  {
+   "generation": 147,
+   "score": 3.922,
+   "seen_m": 9.726,
+   "turns": 0.073,
+   "jitter": 0.07,
+   "jumps": 4.573,
+   "escaped": 0.562
+  },
+  {
+   "generation": 149,
+   "score": 5.388,
+   "seen_m": 10.362,
+   "turns": 0.073,
+   "jitter": 0.075,
+   "jumps": 4.354,
+   "escaped": 0.734
+  },
+  {
+   "generation": 151,
+   "score": 4.341,
+   "seen_m": 8.892,
+   "turns": 0.042,
+   "jitter": 0.066,
+   "jumps": 3.885,
+   "escaped": 0.625
+  },
+  {
+   "generation": 153,
+   "score": 7.867,
+   "seen_m": 12.324,
+   "turns": 0.0,
+   "jitter": 0.067,
+   "jumps": 3.833,
+   "escaped": 0.641
+  },
+  {
+   "generation": 155,
+   "score": 5.963,
+   "seen_m": 10.159,
+   "turns": 0.0,
+   "jitter": 0.073,
+   "jumps": 4.062,
+   "escaped": 0.797
+  },
+  {
+   "generation": 157,
+   "score": 7.219,
+   "seen_m": 11.451,
+   "turns": 0.094,
+   "jitter": 0.07,
+   "jumps": 4.208,
+   "escaped": 0.797
+  },
+  {
+   "generation": 159,
+   "score": 8.504,
+   "seen_m": 12.394,
+   "turns": 0.01,
+   "jitter": 0.066,
+   "jumps": 4.323,
+   "escaped": 0.844
+  },
+  {
+   "generation": 161,
+   "score": 7.147,
+   "seen_m": 12.678,
+   "turns": 0.094,
+   "jitter": 0.072,
+   "jumps": 4.958,
+   "escaped": 0.719
+  },
+  {
+   "generation": 163,
+   "score": 13.387,
+   "seen_m": 17.006,
+   "turns": 0.0,
+   "jitter": 0.071,
+   "jumps": 4.51,
+   "escaped": 0.984
+  },
+  {
+   "generation": 165,
+   "score": 9.41,
+   "seen_m": 12.799,
+   "turns": 0.104,
+   "jitter": 0.073,
+   "jumps": 3.948,
+   "escaped": 0.938
+  },
+  {
+   "generation": 167,
+   "score": 5.578,
+   "seen_m": 11.16,
+   "turns": 0.042,
+   "jitter": 0.072,
+   "jumps": 3.479,
+   "escaped": 0.422
+  },
+  {
+   "generation": 169,
+   "score": 12.816,
+   "seen_m": 16.237,
+   "turns": 0.0,
+   "jitter": 0.066,
+   "jumps": 4.031,
+   "escaped": 0.891
+  },
+  {
+   "generation": 171,
+   "score": 10.028,
+   "seen_m": 13.288,
+   "turns": 0.062,
+   "jitter": 0.069,
+   "jumps": 4.083,
+   "escaped": 0.953
+  },
+  {
+   "generation": 173,
+   "score": 5.769,
+   "seen_m": 10.693,
+   "turns": 0.229,
+   "jitter": 0.07,
+   "jumps": 4.031,
+   "escaped": 0.641
+  },
+  {
+   "generation": 175,
+   "score": 6.252,
+   "seen_m": 10.857,
+   "turns": 0.021,
+   "jitter": 0.069,
+   "jumps": 4.51,
+   "escaped": 0.766
+  },
+  {
+   "generation": 177,
+   "score": 8.637,
+   "seen_m": 12.492,
+   "turns": 0.062,
+   "jitter": 0.068,
+   "jumps": 4.271,
+   "escaped": 0.844
+  },
+  {
+   "generation": 179,
+   "score": 9.272,
+   "seen_m": 13.791,
+   "turns": 0.219,
+   "jitter": 0.067,
+   "jumps": 4.635,
+   "escaped": 0.812
+  },
+  {
+   "generation": 181,
+   "score": 9.727,
+   "seen_m": 13.329,
+   "turns": 0.0,
+   "jitter": 0.065,
+   "jumps": 3.792,
+   "escaped": 0.766
+  },
+  {
+   "generation": 183,
+   "score": 13.404,
+   "seen_m": 16.564,
+   "turns": 0.042,
+   "jitter": 0.068,
+   "jumps": 4.188,
+   "escaped": 0.969
+  },
+  {
+   "generation": 185,
+   "score": 8.169,
+   "seen_m": 12.889,
+   "turns": 0.0,
+   "jitter": 0.062,
+   "jumps": 4.188,
+   "escaped": 0.594
+  },
+  {
+   "generation": 187,
+   "score": 15.602,
+   "seen_m": 19.218,
+   "turns": 0.0,
+   "jitter": 0.061,
+   "jumps": 4.906,
+   "escaped": 0.938
+  },
+  {
+   "generation": 189,
+   "score": 13.742,
+   "seen_m": 17.304,
+   "turns": 0.0,
+   "jitter": 0.065,
+   "jumps": 5.021,
+   "escaped": 1.0
+  },
+  {
+   "generation": 191,
+   "score": 8.161,
+   "seen_m": 13.124,
+   "turns": 0.052,
+   "jitter": 0.06,
+   "jumps": 4.396,
+   "escaped": 0.578
+  },
+  {
+   "generation": 193,
+   "score": 12.856,
+   "seen_m": 16.331,
+   "turns": 0.021,
+   "jitter": 0.059,
+   "jumps": 4.729,
+   "escaped": 0.906
+  },
+  {
+   "generation": 195,
+   "score": 8.642,
+   "seen_m": 13.553,
+   "turns": 0.0,
+   "jitter": 0.057,
+   "jumps": 5.229,
+   "escaped": 0.703
+  },
+  {
+   "generation": 197,
+   "score": 8.315,
+   "seen_m": 12.729,
+   "turns": 0.0,
+   "jitter": 0.056,
+   "jumps": 5.292,
+   "escaped": 0.797
   }
  ],
  "hyper": {
   "hidden": 64,
   "gamma": 0.95,
   "sigma": 0.22,
+  "play_noise": 0.35,
+  "jerk": 0.05,
   "lr": 0.0003
  },
- "check_10_new_worlds_60s": {
+ "check_10_new_worlds_60s_as_in_game": {
   "before": {
+   "turns_per_min": 0.9,
+   "jitter": 0.0325,
+   "dangle": 0.0064,
+   "odometer_m": 30.9323,
+   "displacement_m": 3.5961,
+   "jumps": 12.7,
+   "falls": 0.0,
    "worlds": 10,
-   "seconds_each": 60,
-   "odometer_m_mean": 35.9,
-   "displacement_m_mean": 2.98,
-   "moved_over_2m": 6,
-   "falls_total": 0,
-   "jumps_total": 116,
-   "pred_err_mean": 0.11585
+   "moved_over_2m": 8
   },
   "after": {
+   "turns_per_min": 0.6,
+   "jitter": 0.0672,
+   "dangle": 0.0353,
+   "odometer_m": 142.3726,
+   "displacement_m": 90.3351,
+   "jumps": 21.2,
+   "falls": 0.0,
    "worlds": 10,
-   "seconds_each": 60,
-   "odometer_m_mean": 127.11,
-   "displacement_m_mean": 62.13,
-   "moved_over_2m": 10,
-   "falls_total": 0,
-   "jumps_total": 263,
-   "pred_err_mean": 0.01339
+   "moved_over_2m": 10
   }
  },
- "history": [
+ "check_worst_hollow_30s": {
+  "worlds": 10,
+  "escaped": 10,
+  "mean_depth_m": 1.93,
+  "mean_seconds_when_escaped": 6.1
+ },
+ "online_history": [
   {
-   "odometer_m": 34.4509,
-   "displacement_m": 0.8804,
-   "falls": 0,
-   "jumps": 9,
-   "pred_err": 0.0039,
-   "reward": 0.0493,
-   "world": 1
-  },
-  {
-   "odometer_m": 112.2429,
-   "displacement_m": 17.9641,
-   "falls": 0,
+   "odometer_m": 111.5279,
+   "displacement_m": 41.5113,
    "jumps": 22,
-   "pred_err": 0.0134,
-   "reward": 0.0392,
-   "world": 10
+   "reward": -0.0043
   },
   {
-   "odometer_m": 140.2098,
-   "displacement_m": 69.0578,
-   "falls": 0,
-   "jumps": 19,
-   "pred_err": 0.0219,
-   "reward": 0.0682,
-   "world": 19
-  },
-  {
-   "odometer_m": 21.8955,
-   "displacement_m": 1.0517,
-   "falls": 0,
-   "jumps": 0,
-   "pred_err": 0.001,
-   "reward": 0.0295,
-   "world": 28
-  },
-  {
-   "odometer_m": 107.9012,
-   "displacement_m": 1.1793,
-   "falls": 0,
-   "jumps": 2,
-   "pred_err": 0.0266,
-   "reward": 0.0854,
-   "world": 37
-  },
-  {
-   "odometer_m": 68.7746,
-   "displacement_m": 5.0186,
-   "falls": 0,
-   "jumps": 8,
-   "pred_err": 0.0188,
-   "reward": 0.0831,
-   "world": 46
-  },
-  {
-   "odometer_m": 101.1731,
-   "displacement_m": 29.3613,
-   "falls": 0,
-   "jumps": 6,
-   "pred_err": 0.0172,
-   "reward": 0.0817,
-   "world": 55
-  },
-  {
-   "odometer_m": 136.5024,
-   "displacement_m": 14.574,
-   "falls": 0,
-   "jumps": 5,
-   "pred_err": 0.017,
-   "reward": 0.0794,
-   "world": 64
-  },
-  {
-   "odometer_m": 90.1486,
-   "displacement_m": 2.7404,
-   "falls": 0,
-   "jumps": 3,
-   "pred_err": 0.0117,
-   "reward": 0.0883,
-   "world": 73
-  },
-  {
-   "odometer_m": 38.6953,
-   "displacement_m": 8.9179,
-   "falls": 0,
-   "jumps": 2,
-   "pred_err": 0.0153,
-   "reward": 0.083,
-   "world": 82
-  },
-  {
-   "odometer_m": 99.5504,
-   "displacement_m": 4.3637,
-   "falls": 0,
-   "jumps": 4,
-   "pred_err": 0.0169,
-   "reward": 0.0924,
-   "world": 91
-  },
-  {
-   "odometer_m": 93.842,
-   "displacement_m": 10.2887,
-   "falls": 0,
-   "jumps": 8,
-   "pred_err": 0.0143,
-   "reward": 0.0765,
-   "world": 100
-  },
-  {
-   "odometer_m": 108.0798,
-   "displacement_m": 5.5207,
-   "falls": 0,
-   "jumps": 10,
-   "pred_err": 0.0071,
-   "reward": 0.0802,
-   "world": 109
-  },
-  {
-   "odometer_m": 99.0014,
-   "displacement_m": 33.2317,
-   "falls": 0,
-   "jumps": 7,
-   "pred_err": 0.0169,
-   "reward": 0.072,
-   "world": 118
-  },
-  {
-   "odometer_m": 96.5512,
-   "displacement_m": 41.9459,
-   "falls": 0,
-   "jumps": 5,
-   "pred_err": 0.0138,
-   "reward": 0.069,
-   "world": 127
-  },
-  {
-   "odometer_m": 110.439,
-   "displacement_m": 3.9435,
-   "falls": 0,
-   "jumps": 6,
-   "pred_err": 0.0212,
-   "reward": 0.0974,
-   "world": 136
-  },
-  {
-   "odometer_m": 70.3444,
-   "displacement_m": 5.1178,
-   "falls": 0,
-   "jumps": 5,
-   "pred_err": 0.005,
-   "reward": 0.0625,
-   "world": 145
-  },
-  {
-   "odometer_m": 119.3823,
-   "displacement_m": 103.1869,
-   "falls": 0,
-   "jumps": 4,
-   "pred_err": 0.0094,
-   "reward": 0.062,
-   "world": 154
-  },
-  {
-   "odometer_m": 141.5206,
-   "displacement_m": 98.1609,
-   "falls": 0,
-   "jumps": 6,
-   "pred_err": 0.0123,
-   "reward": 0.0519,
-   "world": 163
-  },
-  {
-   "odometer_m": 131.9025,
-   "displacement_m": 17.1952,
-   "falls": 0,
-   "jumps": 4,
-   "pred_err": 0.014,
-   "reward": 0.0626,
-   "world": 172
-  },
-  {
-   "odometer_m": 126.1748,
-   "displacement_m": 6.4635,
-   "falls": 0,
-   "jumps": 7,
-   "pred_err": 0.0146,
-   "reward": 0.0698,
-   "world": 181
-  },
-  {
-   "odometer_m": 109.2702,
-   "displacement_m": 21.1633,
-   "falls": 0,
-   "jumps": 13,
-   "pred_err": 0.0177,
-   "reward": 0.0727,
-   "world": 190
-  },
-  {
-   "odometer_m": 92.9857,
-   "displacement_m": 39.6023,
-   "falls": 0,
-   "jumps": 10,
-   "pred_err": 0.0127,
-   "reward": 0.0667,
-   "world": 199
-  },
-  {
-   "odometer_m": 33.0311,
-   "displacement_m": 14.9014,
-   "falls": 0,
-   "jumps": 3,
-   "pred_err": 0.0075,
-   "reward": 0.0523,
-   "world": 208
-  },
-  {
-   "odometer_m": 9.2253,
-   "displacement_m": 1.8563,
-   "falls": 0,
-   "jumps": 3,
-   "pred_err": 0.0038,
-   "reward": 0.0397,
-   "world": 217
-  },
-  {
-   "odometer_m": 24.1009,
-   "displacement_m": 1.0027,
-   "falls": 0,
-   "jumps": 7,
-   "pred_err": 0.0083,
-   "reward": 0.0829,
-   "world": 226
-  },
-  {
-   "odometer_m": 48.6149,
-   "displacement_m": 8.4832,
-   "falls": 0,
-   "jumps": 20,
-   "pred_err": 0.0128,
-   "reward": 0.0771,
-   "world": 235
-  },
-  {
-   "odometer_m": 27.2367,
-   "displacement_m": 6.1335,
-   "falls": 0,
-   "jumps": 9,
-   "pred_err": 0.0044,
-   "reward": 0.0407,
-   "world": 244
-  },
-  {
-   "odometer_m": 45.992,
-   "displacement_m": 5.0956,
-   "falls": 0,
-   "jumps": 13,
-   "pred_err": 0.0115,
-   "reward": 0.0705,
-   "world": 253
-  },
-  {
-   "odometer_m": 15.8818,
-   "displacement_m": 1.5429,
-   "falls": 0,
-   "jumps": 2,
-   "pred_err": 0.0084,
-   "reward": 0.0791,
-   "world": 262
-  },
-  {
-   "odometer_m": 57.5873,
-   "displacement_m": 2.7322,
-   "falls": 0,
-   "jumps": 18,
-   "pred_err": 0.0182,
-   "reward": 0.0875,
-   "world": 271
-  },
-  {
-   "odometer_m": 64.2263,
-   "displacement_m": 3.3856,
-   "falls": 0,
-   "jumps": 27,
-   "pred_err": 0.0145,
-   "reward": 0.0759,
-   "world": 280
-  },
-  {
-   "odometer_m": 98.1013,
-   "displacement_m": 3.163,
-   "falls": 0,
-   "jumps": 19,
-   "pred_err": 0.0035,
-   "reward": 0.0595,
-   "world": 289
-  },
-  {
-   "odometer_m": 60.2545,
-   "displacement_m": 5.5558,
-   "falls": 0,
-   "jumps": 13,
-   "pred_err": 0.0114,
-   "reward": 0.0691,
-   "world": 298
-  },
-  {
-   "odometer_m": 16.0961,
-   "displacement_m": 3.2652,
-   "falls": 0,
+   "odometer_m": 140.2919,
+   "displacement_m": 94.4125,
    "jumps": 21,
-   "pred_err": 0.0086,
-   "reward": 0.08,
-   "world": 307
+   "reward": -0.0016
   },
   {
-   "odometer_m": 40.839,
-   "displacement_m": 2.7338,
-   "falls": 0,
-   "jumps": 28,
-   "pred_err": 0.0094,
-   "reward": 0.0887,
-   "world": 316
+   "odometer_m": 147.5432,
+   "displacement_m": 99.3203,
+   "jumps": 22,
+   "reward": 0.0034
   },
   {
-   "odometer_m": 56.9561,
-   "displacement_m": 10.3048,
-   "falls": 0,
-   "jumps": 28,
-   "pred_err": 0.0153,
-   "reward": 0.079,
-   "world": 325
-  },
-  {
-   "odometer_m": 23.6012,
-   "displacement_m": 9.9146,
-   "falls": 0,
-   "jumps": 26,
-   "pred_err": 0.002,
-   "reward": 0.0164,
-   "world": 334
-  },
-  {
-   "odometer_m": 59.5476,
-   "displacement_m": 16.4738,
-   "falls": 0,
+   "odometer_m": 128.1258,
+   "displacement_m": 78.6901,
    "jumps": 21,
-   "pred_err": 0.0117,
-   "reward": 0.0597,
-   "world": 343
+   "reward": 0.0032
   },
   {
-   "odometer_m": 90.0991,
-   "displacement_m": 6.1428,
-   "falls": 0,
-   "jumps": 21,
-   "pred_err": 0.0119,
-   "reward": 0.0735,
-   "world": 352
+   "odometer_m": 127.3025,
+   "displacement_m": 69.3745,
+   "jumps": 22,
+   "reward": 0.0063
   },
   {
-   "odometer_m": 126.8241,
-   "displacement_m": 72.3073,
-   "falls": 0,
-   "jumps": 27,
-   "pred_err": 0.0093,
-   "reward": 0.0576,
-   "world": 361
+   "odometer_m": 156.7506,
+   "displacement_m": 109.2092,
+   "jumps": 22,
+   "reward": -0.0025
   },
   {
-   "odometer_m": 49.9869,
-   "displacement_m": 0.3939,
-   "falls": 0,
-   "jumps": 0,
-   "pred_err": 0.0088,
-   "reward": 0.0784,
-   "world": 370
-  },
-  {
-   "odometer_m": 97.5998,
-   "displacement_m": 9.9463,
-   "falls": 0,
-   "jumps": 24,
-   "pred_err": 0.0152,
-   "reward": 0.0709,
-   "world": 379
-  },
-  {
-   "odometer_m": 86.248,
-   "displacement_m": 5.865,
-   "falls": 0,
-   "jumps": 16,
-   "pred_err": 0.0187,
-   "reward": 0.0751,
-   "world": 388
-  },
-  {
-   "odometer_m": 90.8273,
-   "displacement_m": 15.9052,
-   "falls": 0,
-   "jumps": 24,
-   "pred_err": 0.0141,
-   "reward": 0.0853,
-   "world": 397
-  },
-  {
-   "odometer_m": 80.6811,
-   "displacement_m": 13.7694,
-   "falls": 0,
-   "jumps": 27,
-   "pred_err": 0.0126,
-   "reward": 0.052,
-   "world": 406
-  },
-  {
-   "odometer_m": 74.8253,
-   "displacement_m": 13.0852,
-   "falls": 0,
-   "jumps": 24,
-   "pred_err": 0.0077,
-   "reward": 0.0675,
-   "world": 415
-  },
-  {
-   "odometer_m": 31.0593,
-   "displacement_m": 1.3916,
-   "falls": 0,
-   "jumps": 5,
-   "pred_err": 0.0074,
-   "reward": 0.0783,
-   "world": 424
-  },
-  {
-   "odometer_m": 91.6365,
-   "displacement_m": 4.9727,
-   "falls": 0,
-   "jumps": 25,
-   "pred_err": 0.0154,
-   "reward": 0.073,
-   "world": 433
-  },
-  {
-   "odometer_m": 93.087,
-   "displacement_m": 1.3415,
-   "falls": 0,
-   "jumps": 27,
-   "pred_err": 0.0135,
-   "reward": 0.0593,
-   "world": 442
-  },
-  {
-   "odometer_m": 64.2915,
-   "displacement_m": 6.0405,
-   "falls": 0,
-   "jumps": 25,
-   "pred_err": 0.0088,
-   "reward": 0.0648,
-   "world": 451
-  },
-  {
-   "odometer_m": 39.0318,
-   "displacement_m": 2.1891,
-   "falls": 0,
-   "jumps": 0,
-   "pred_err": 0.0075,
-   "reward": 0.0718,
-   "world": 460
-  },
-  {
-   "odometer_m": 80.1159,
-   "displacement_m": 0.0356,
-   "falls": 0,
-   "jumps": 7,
-   "pred_err": 0.009,
-   "reward": 0.0622,
-   "world": 469
-  },
-  {
-   "odometer_m": 79.7425,
-   "displacement_m": 19.8936,
-   "falls": 0,
+   "odometer_m": 137.8418,
+   "displacement_m": 77.6833,
    "jumps": 23,
-   "pred_err": 0.0102,
-   "reward": 0.0691,
-   "world": 478
+   "reward": 0.0038
   },
   {
-   "odometer_m": 102.898,
-   "displacement_m": 10.8812,
-   "falls": 0,
-   "jumps": 29,
-   "pred_err": 0.0097,
-   "reward": 0.0534,
-   "world": 487
+   "odometer_m": 129.1346,
+   "displacement_m": 72.5145,
+   "jumps": 25,
+   "reward": -0.003
   },
   {
-   "odometer_m": 86.6099,
-   "displacement_m": 13.8437,
-   "falls": 0,
-   "jumps": 29,
-   "pred_err": 0.0103,
-   "reward": 0.0633,
-   "world": 496
+   "odometer_m": 133.5716,
+   "displacement_m": 77.3199,
+   "jumps": 19,
+   "reward": -0.0007
   },
   {
-   "odometer_m": 86.3302,
-   "displacement_m": 3.4102,
-   "falls": 0,
-   "jumps": 26,
-   "pred_err": 0.0076,
-   "reward": 0.0771,
-   "world": 505
-  },
-  {
-   "odometer_m": 98.4568,
-   "displacement_m": 7.9797,
-   "falls": 0,
-   "jumps": 26,
-   "pred_err": 0.0119,
-   "reward": 0.051,
-   "world": 514
-  },
-  {
-   "odometer_m": 106.4726,
-   "displacement_m": 21.8879,
-   "falls": 0,
-   "jumps": 28,
-   "pred_err": 0.0132,
-   "reward": 0.0668,
-   "world": 523
-  },
-  {
-   "odometer_m": 4.2971,
-   "displacement_m": 1.6846,
-   "falls": 0,
-   "jumps": 0,
-   "pred_err": 0.0056,
-   "reward": 0.0827,
-   "world": 532
-  },
-  {
-   "odometer_m": 44.3727,
-   "displacement_m": 0.9915,
-   "falls": 0,
-   "jumps": 15,
-   "pred_err": 0.0077,
-   "reward": 0.0771,
-   "world": 541
-  },
-  {
-   "odometer_m": 96.7521,
-   "displacement_m": 14.53,
-   "falls": 0,
-   "jumps": 24,
-   "pred_err": 0.0106,
-   "reward": 0.0743,
-   "world": 550
-  },
-  {
-   "odometer_m": 86.702,
-   "displacement_m": 1.0124,
-   "falls": 0,
-   "jumps": 9,
-   "pred_err": 0.0102,
-   "reward": 0.051,
-   "world": 559
-  },
-  {
-   "odometer_m": 97.2327,
-   "displacement_m": 19.4241,
-   "falls": 0,
-   "jumps": 22,
-   "pred_err": 0.0075,
-   "reward": 0.0745,
-   "world": 568
-  },
-  {
-   "odometer_m": 83.8635,
-   "displacement_m": 3.7148,
-   "falls": 0,
+   "odometer_m": 146.6629,
+   "displacement_m": 81.6198,
    "jumps": 21,
-   "pred_err": 0.0115,
-   "reward": 0.0531,
-   "world": 577
+   "reward": 0.0014
+  },
+  {
+   "odometer_m": 122.3714,
+   "displacement_m": 73.5476,
+   "jumps": 22,
+   "reward": 0.0064
+  },
+  {
+   "odometer_m": 133.1425,
+   "displacement_m": 62.5631,
+   "jumps": 23,
+   "reward": -0.0029
+  },
+  {
+   "odometer_m": 127.7108,
+   "displacement_m": 77.6817,
+   "jumps": 20,
+   "reward": 0.0015
+  },
+  {
+   "odometer_m": 137.8304,
+   "displacement_m": 94.4881,
+   "jumps": 25,
+   "reward": -0.0002
+  },
+  {
+   "odometer_m": 136.5235,
+   "displacement_m": 90.1458,
+   "jumps": 23,
+   "reward": 0.0004
+  },
+  {
+   "odometer_m": 121.8379,
+   "displacement_m": 62.0002,
+   "jumps": 19,
+   "reward": 0.0057
+  },
+  {
+   "odometer_m": 136.8133,
+   "displacement_m": 66.488,
+   "jumps": 21,
+   "reward": 0.0014
+  },
+  {
+   "odometer_m": 121.5304,
+   "displacement_m": 63.8503,
+   "jumps": 19,
+   "reward": 0.0011
+  },
+  {
+   "odometer_m": 152.8107,
+   "displacement_m": 99.9568,
+   "jumps": 22,
+   "reward": -0.0032
+  },
+  {
+   "odometer_m": 148.9033,
+   "displacement_m": 101.0361,
+   "jumps": 21,
+   "reward": 0.0009
+  },
+  {
+   "odometer_m": 138.6253,
+   "displacement_m": 82.148,
+   "jumps": 24,
+   "reward": 0.0051
+  },
+  {
+   "odometer_m": 141.4251,
+   "displacement_m": 81.5944,
+   "jumps": 22,
+   "reward": -0.0019
+  },
+  {
+   "odometer_m": 140.0038,
+   "displacement_m": 80.2155,
+   "jumps": 24,
+   "reward": -0.0027
+  },
+  {
+   "odometer_m": 120.7916,
+   "displacement_m": 60.9157,
+   "jumps": 20,
+   "reward": -0.0016
+  },
+  {
+   "odometer_m": 144.2592,
+   "displacement_m": 84.2138,
+   "jumps": 19,
+   "reward": 0.0016
+  },
+  {
+   "odometer_m": 136.4547,
+   "displacement_m": 80.2924,
+   "jumps": 18,
+   "reward": 0.0022
+  },
+  {
+   "odometer_m": 138.0545,
+   "displacement_m": 85.8441,
+   "jumps": 17,
+   "reward": 0.0021
+  },
+  {
+   "odometer_m": 127.5365,
+   "displacement_m": 74.3325,
+   "jumps": 21,
+   "reward": -0.0021
+  },
+  {
+   "odometer_m": 132.3248,
+   "displacement_m": 55.6456,
+   "jumps": 22,
+   "reward": 0.0018
+  },
+  {
+   "odometer_m": 122.6222,
+   "displacement_m": 52.2278,
+   "jumps": 22,
+   "reward": 0.0072
+  },
+  {
+   "odometer_m": 135.1607,
+   "displacement_m": 89.8941,
+   "jumps": 24,
+   "reward": 0.0018
+  },
+  {
+   "odometer_m": 115.6382,
+   "displacement_m": 57.9124,
+   "jumps": 19,
+   "reward": -0.0029
+  },
+  {
+   "odometer_m": 119.0891,
+   "displacement_m": 56.2881,
+   "jumps": 20,
+   "reward": 0.0121
+  },
+  {
+   "odometer_m": 78.9045,
+   "displacement_m": 27.4087,
+   "jumps": 11,
+   "reward": 0.013
+  },
+  {
+   "odometer_m": 134.6055,
+   "displacement_m": 75.9309,
+   "jumps": 22,
+   "reward": -0.0008
+  },
+  {
+   "odometer_m": 134.6733,
+   "displacement_m": 88.2461,
+   "jumps": 21,
+   "reward": -0.0015
+  },
+  {
+   "odometer_m": 132.1381,
+   "displacement_m": 67.8584,
+   "jumps": 24,
+   "reward": -0.0083
+  },
+  {
+   "odometer_m": 135.3947,
+   "displacement_m": 90.3598,
+   "jumps": 25,
+   "reward": -0.0003
+  },
+  {
+   "odometer_m": 157.9622,
+   "displacement_m": 108.4153,
+   "jumps": 24,
+   "reward": 0.0065
+  },
+  {
+   "odometer_m": 121.3535,
+   "displacement_m": 46.9865,
+   "jumps": 23,
+   "reward": -0.0033
+  },
+  {
+   "odometer_m": 128.0206,
+   "displacement_m": 86.0487,
+   "jumps": 25,
+   "reward": -0.0014
+  },
+  {
+   "odometer_m": 151.3928,
+   "displacement_m": 106.4436,
+   "jumps": 22,
+   "reward": -0.0012
+  },
+  {
+   "odometer_m": 131.889,
+   "displacement_m": 79.2303,
+   "jumps": 19,
+   "reward": 0.0026
+  },
+  {
+   "odometer_m": 143.4874,
+   "displacement_m": 86.5594,
+   "jumps": 20,
+   "reward": 0.0011
+  },
+  {
+   "odometer_m": 115.3353,
+   "displacement_m": 71.6611,
+   "jumps": 19,
+   "reward": 0.0011
+  },
+  {
+   "odometer_m": 137.5268,
+   "displacement_m": 89.2664,
+   "jumps": 20,
+   "reward": -0.0037
+  },
+  {
+   "odometer_m": 126.7014,
+   "displacement_m": 76.8952,
+   "jumps": 21,
+   "reward": 0.0045
+  },
+  {
+   "odometer_m": 108.1591,
+   "displacement_m": 51.5857,
+   "jumps": 23,
+   "reward": 0.0003
   }
  ]
 }

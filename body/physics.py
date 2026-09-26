@@ -17,6 +17,8 @@ from body import skeleton
 DT = 1.0 / 60.0
 G = 9.8
 TAU = 0.12            # с - за столько сустав проходит 63 % пути к цели
+TAU_CMD = 0.1         # с - команда мозга сама сглаживается (инерция «мотора»): сустав
+                      # трогается и останавливается плавно, а не рывком
 MAX_SPEED = 7.0       # рад/с
 SLIP = 0.06           # м за шаг физики - дальше стопа проскальзывает
 WALL_SLOPE = 2.5      # подъём круче (м на м) - стена
@@ -31,6 +33,8 @@ FALL_TIME = 1.6       # с лежит и встаёт
 CONTACT = 0.015       # м - стопа ближе к земле - стоит
 SNAP = 0.06           # м - под горку таз прилипает к земле, а не подпрыгивает
 TURN = 0.35           # гистерезис разворота
+TURN_PAUSE = 0.6      # с - разворот не чаще: развернуться - это целое движение
+TURN_HOLD = 0.3       # с - столько должно держаться желание идти в другую сторону
 AIR_DRAG = 0.995
 FALLEN_POSE = skeleton.clip(np.array([0.0, 0.2, 1.4, 1.1, 0.4, 0.6, 0.5, 0.2, 0.6, 0.3]))
 TILT = 1.4
@@ -41,7 +45,11 @@ class Human:
         self.body, self.world = body, world
         self.angles = skeleton.rest_angles()
         self.targets = self.angles.copy()
+        self.command = self.angles.copy()      # сглаженная команда, к ней тянутся суставы
         self.facing = 1
+        self.turn_cd = 0.0
+        self.turn_wish = 0.0       # с - сколько держится желание развернуться
+        self.clock = 0.0           # с - свои часы тела: от них «пульс» в наблюдении мозга
         self.px = float(x)
         rel = skeleton.feet(body, self.angles, 1)
         self.py = self._req(self.px, rel)
@@ -77,23 +85,25 @@ class Human:
     def step(self, targets=None, turn=0.0, jump=False, dt=DT):
         events = []
         if self.fallen > 0:
+            self.clock += dt
             return self._lying(dt, events)
         if targets is not None:
             self.targets = skeleton.clip(np.asarray(targets, float))
-        flipped = False
-        if turn > TURN and self.facing < 0 or turn < -TURN and self.facing > 0:
-            self.facing = -self.facing
-            flipped = True
+        self.clock += dt
+        self.turn_cd = max(0.0, self.turn_cd - dt)
+        opposite = turn > TURN and self.facing < 0 or turn < -TURN and self.facing > 0
+        self.turn_wish = self.turn_wish + dt if opposite else 0.0
+        if self.turn_cd <= 0 and self.turn_wish >= TURN_HOLD - 1e-9:
+            self._turn_around()
+            self.turn_wish = 0.0
         self.jump_cd = max(0.0, self.jump_cd - dt)
 
         rel_old = skeleton.feet(self.body, self.angles, self.facing)
+        self.command = self.command + (self.targets - self.command) * (1.0 - math.exp(-dt / TAU_CMD))
         k = 1.0 - math.exp(-dt / TAU)
-        delta = np.clip((self.targets - self.angles) * k, -MAX_SPEED * dt, MAX_SPEED * dt)
+        delta = np.clip((self.command - self.angles) * k, -MAX_SPEED * dt, MAX_SPEED * dt)
         self.angles = self.angles + delta
         rel = skeleton.feet(self.body, self.angles, self.facing)
-        if flipped:
-            self.anchor = [self.px + fx for fx, _ in rel]
-            rel_old = rel
 
         px_old = self.px
         if jump and self.grounded and self.jump_cd <= 0:
@@ -110,6 +120,23 @@ class Human:
             self._in_air(rel, dt, events)
         self.odometer += abs(self.px - px_old)
         return events
+
+    def _turn_around(self):
+        """Разворот на месте: стопы остаются там, где стояли. Для этого бёдра зеркалятся
+        (что было впереди - теперь позади). Раньше стопы переставлялись зеркально вместе со
+        взглядом, и частые развороты с толчком ногой давали ход - мозг это нашёл и
+        разворачивался по 10 раз в секунду."""
+        self.facing = -self.facing
+        self.turn_cd = TURN_PAUSE
+        for name in ("hip_l", "hip_r"):
+            j = skeleton.JOINTS.index(name)
+            self.angles[j] = -self.angles[j]
+            self.command[j] = -self.command[j]
+        self.angles = skeleton.clip(self.angles)
+        self.command = skeleton.clip(self.command)
+        # стопы там же, где были (с точностью до изгиба колена) - опора с этого места
+        rel = skeleton.feet(self.body, self.angles, self.facing)
+        self.anchor = [self.px + fx for fx, _ in rel]
 
     def _blocked(self, px, nx, rel):
         rise = self._req(nx, rel) - self._req(px, rel)
@@ -188,6 +215,7 @@ class Human:
         k = 1.0 - math.exp(-dt / TAU)
         self.angles = self.angles + (target - self.angles) * k
         self.targets = self.angles.copy()
+        self.command = self.angles.copy()
         self.vx *= 0.85
         self.px += self.vx * dt
         self.vy = 0.0

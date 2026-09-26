@@ -136,3 +136,53 @@ def test_loading_a_broken_file_raises(tmp_path):
     bad.write_bytes(b"not a zip")
     with pytest.raises(Exception):
         Brain(seed=0).load(bad)
+
+
+def test_in_the_game_the_noise_is_smaller(body, wgenome):
+    """Шум исследования в игре - PLAY_NOISE от учебного: человечек меньше дёргается."""
+    from brain.brain import PLAY_NOISE
+    w = generate(wgenome, 3, 80.0)
+    spread = {}
+    for noise in (1.0, PLAY_NOISE):
+        brain = Brain(seed=11)
+        h = Human(body, w, x=5.0)
+        devs = []
+        for _ in range(300):
+            o = observe.observe(h, w)
+            mean = brain.decide(o, explore=False).targets
+            d, _ = brain.step(o, learn=False, noise=noise)
+            devs.append(np.abs(d.targets - mean).mean())
+            h.step(d.targets, d.turn)
+        spread[noise] = np.mean(devs)
+    assert spread[PLAY_NOISE] < 0.5 * spread[1.0]
+
+
+def test_jerks_cost_reward(body, wgenome):
+    from brain.brain import JERK
+    brain = Brain(seed=12)
+    w = generate(wgenome, 3, 80.0)
+    h = Human(body, w, x=5.0)
+    o = observe.observe(h, w)
+    brain.step(o, learn=False)
+    a1 = brain.last_action.copy()
+    brain.step(o, learn=False)
+    a2 = brain.last_action
+    assert brain.last_jerk == pytest.approx(JERK * float(((a2 - a1) ** 2).mean()))
+    cur_before = brain.err_ema
+    _, reward = brain.step(o, learn=False)
+    assert reward is not None and brain.last_jerk >= 0
+    del cur_before
+
+
+def test_brain_feels_a_steady_pulse(body):
+    """Вход «пульс»: синус и косинус собственных часов тела с периодом PULSE - ритм, на
+    который может опереться походка (сама походка не задана)."""
+    flat = Ground(lambda x: 0.0)
+    h = Human(body, flat, x=5.0)
+    o0 = observe.observe(h, flat)
+    for _ in range(int(observe.PULSE * 60 / 4)):
+        h.step(h.angles)
+    o1 = observe.observe(h, flat)
+    s, c = observe.CLOCK.start, observe.CLOCK.start + 1
+    assert o0[s] == pytest.approx(0.0, abs=1e-6) and o0[c] == pytest.approx(1.0)
+    assert o1[s] == pytest.approx(1.0, abs=0.05) and abs(o1[c]) < 0.1

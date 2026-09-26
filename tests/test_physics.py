@@ -184,3 +184,83 @@ def test_random_brain_never_breaks_physics(body):
         for name in ("ft_l", "ft_r"):
             x, y = pts[name]
             assert y >= world.height_at(x) - 0.05, (i, name)
+
+
+def test_turning_on_the_spot_is_not_a_way_to_travel(body):
+    """Замер 26.09: обученный мозг разворачивался 577 раз в минуту - разворот переставлял
+    стопы, и туда-сюда с толчком ногой давало ход. Теперь при развороте стопы остаются на
+    месте (бёдра зеркалятся), и дёрганье на месте никуда не ведёт."""
+    h = Human(body, FLAT, x=0.0)
+    settle(h)
+    for i in range(int(6 / DT)):
+        phase = (i // 12) % 2
+        turn = 1.0 if phase == 0 else -1.0
+        h.step(pose(kn_l=1.6, hip_r=-0.4 if phase == 0 else 0.4, kn_r=0.1), turn=turn)
+    assert abs(h.px) < 1.0
+
+
+def test_turns_are_not_more_often_than_the_pause(body):
+    from body.physics import TURN_PAUSE
+    h = Human(body, FLAT, x=0.0)
+    settle(h)
+    flips, last = [], h.facing
+    for i in range(int(4 / DT)):
+        h.step(skeleton.rest_angles(), turn=1.0 if (i // 21) % 2 == 0 else -1.0)
+        if h.facing != last:
+            flips.append(i * DT)
+            last = h.facing
+    assert len(flips) >= 3
+    assert min(np.diff(flips)) >= TURN_PAUSE - 1e-9
+
+
+def test_a_real_change_of_direction_still_turns_him(body):
+    h = Human(body, FLAT, x=0.0)
+    settle(h)
+    for _ in range(int(0.5 / DT)):
+        h.step(skeleton.rest_angles(), turn=-1.0)
+    assert h.facing == -1
+    for _ in range(int(0.5 / DT)):
+        h.step(skeleton.rest_angles(), turn=1.0)
+    assert h.facing == 1
+
+
+def test_joints_start_and_stop_smoothly(body):
+    """Цель сустава прыгнула на 1.5 рад - сустав трогается плавно, без рывка в первом кадре,
+    и приходит без перелёта."""
+    h = Human(body, FLAT, x=0.0)
+    settle(h)
+    j = skeleton.JOINTS.index("sh_r")
+    start = h.angles[j]
+    path = []
+    for _ in range(int(1.5 / DT)):
+        h.step(pose(sh_r=start + 1.5))
+        path.append(h.angles[j])
+    d = np.diff([start] + path)
+    assert d[0] < 0.5 * d.max()                         # трогается, а не прыгает
+    assert (d >= -1e-9).all()                           # без перелёта и возврата
+    assert path[-1] == pytest.approx(start + 1.5, abs=0.02)
+
+
+def test_a_short_flicker_of_the_wish_does_not_turn_him(body):
+    """Разворот - только если желание держится TURN_HOLD: мелькнувшее «налево» на пару
+    кадров (шум) взгляд не меняет."""
+    from body.physics import TURN_HOLD
+    h = Human(body, FLAT, x=0.0)
+    settle(h)
+    flicker = max(1, int(TURN_HOLD / DT) - 3)
+    for _ in range(20):
+        for _ in range(flicker):
+            h.step(skeleton.rest_angles(), turn=-1.0)
+        for _ in range(10):
+            h.step(skeleton.rest_angles(), turn=1.0)
+    assert h.facing == 1
+    for _ in range(int(TURN_HOLD / DT) + 2):
+        h.step(skeleton.rest_angles(), turn=-1.0)
+    assert h.facing == -1
+
+
+def test_body_keeps_its_own_clock(body):
+    h = Human(body, FLAT, x=0.0)
+    for _ in range(90):
+        h.step(skeleton.rest_angles())
+    assert h.clock == pytest.approx(1.5)

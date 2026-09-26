@@ -1,5 +1,6 @@
-"""Звуков в AiBoy нет (решение владельца 26.09.2026): ни голоса, ни QtMultimedia, ни в
-игре, ни в сборке."""
+"""Голоса у человечка нет (решение владельца 26.09.2026). С гитарой (1.1.0) звук вернулся -
+но только для игрушек: QtMultimedia трогает один файл, game/audio.py, и только QAudioSink на
+бэкенде windows, без ffmpeg."""
 import json
 import os
 import re
@@ -14,16 +15,23 @@ from game.settings import Settings
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_no_source_imports_qt_multimedia_or_a_voice():
-    for path in list(ROOT.glob("*.py")) + [p for d in ("nn", "world", "body", "brain", "speech", "game",
-                                                        "train", "teacher", "tools") for p in (ROOT / d).rglob("*.py")]:
+def code_of(text):
+    """Текст без строк документации и комментариев."""
+    return re.sub(r'"""[\s\S]*?"""|#.*', "", text)
+
+
+def test_only_the_mixer_touches_qt_multimedia_and_there_is_no_voice():
+    folders = ("nn", "world", "body", "brain", "speech", "game", "music", "train", "teacher", "tools")
+    for path in list(ROOT.glob("*.py")) + [p for d in folders for p in (ROOT / d).rglob("*.py")]:
         text = path.read_text(encoding="utf-8")
-        assert not re.search(r"^\s*(from|import)\s+(PySide6\.QtMultimedia|voice\b)", text, re.M), path
+        assert not re.search(r"^\s*(from|import)\s+voice\b", text, re.M), path
         assert "QSoundEffect" not in text, path
+        if path.name != "audio.py":
+            assert not re.search(r"(from|import)\s+PySide6\.QtMultimedia", code_of(text)), path
     assert not (ROOT / "voice").exists() and not (ROOT / "models" / "voice.npz").exists()
 
 
-def test_the_running_game_does_not_load_qt_multimedia(tmp_path):
+def test_the_game_without_a_screen_does_not_open_audio(tmp_path):
     code = ("import os, sys; sys.path.insert(0, r'%s'); import offscreen; offscreen.setup(force=True)\n"
             "os.environ['AIBOY_HOME'] = r'%s'\n"
             "from PySide6.QtWidgets import QApplication; app = QApplication([])\n"
@@ -34,9 +42,12 @@ def test_the_running_game_does_not_load_qt_multimedia(tmp_path):
     assert out.stdout.strip().splitlines()[-1] == "False", out.stderr[-500:]
 
 
-def test_the_build_leaves_qt_multimedia_and_ffmpeg_out():
-    assert "PySide6.QtMultimedia" in build.EXCLUDE
-    for name in ("Qt6Multimedia.dll", "avcodec-61.dll", "avformat-61.dll", "avutil-59.dll"):
+def test_the_build_takes_the_audio_sink_but_not_ffmpeg():
+    assert "PySide6.QtMultimedia" not in build.EXCLUDE
+    for name in ("Qt6Multimedia.dll", "windowsmediaplugin.dll"):
+        assert not any(name.startswith(p) for p in build.DROP_PREFIXES), name
+    for name in ("avcodec-61.dll", "avformat-61.dll", "avutil-59.dll", "swresample-5.dll", "swscale-8.dll",
+                 "ffmpegmediaplugin.dll", "Qt6MultimediaWidgets.dll", "Qt6MultimediaQuick.dll"):
         assert any(name.startswith(p) for p in build.DROP_PREFIXES), name
 
 
@@ -46,14 +57,16 @@ def test_the_brain_has_no_sound_output():
     assert "sound" not in Decision.__dataclass_fields__
 
 
-def test_old_settings_with_volume_and_sound_load_and_forget_them(tmp_path):
+def test_old_settings_with_sound_fields_load(tmp_path):
+    """Файл первой сборки (громкость голоса и поле «sound») читается: громкость снова есть -
+    для гитары, лишнее поле забывается."""
     path = tmp_path / "settings.json"
     path.write_text(json.dumps({"volume": 40, "sound": True, "theme": "light", "speed": 2}), encoding="utf-8")
     s = Settings.load(path)
-    assert s.theme == "light" and s.speed == 2 and not hasattr(s, "volume")
+    assert s.theme == "light" and s.speed == 2 and s.volume == 40
     s.save(path)
     saved = json.loads(path.read_text(encoding="utf-8"))
-    assert "volume" not in saved and "sound" not in saved
+    assert saved["volume"] == 40 and "sound" not in saved
 
 
 def test_old_stats_with_sounds_load(tmp_path):

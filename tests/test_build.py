@@ -53,8 +53,10 @@ def test_trim_removes_only_what_the_app_does_not_need(tmp_path):
     (qt / "plugins" / "imageformats").mkdir(parents=True)
     keep = [qt / "Qt6Core.dll", qt / "Qt6Gui.dll", qt / "translations" / "qtbase_ru.qm",
             qt / "plugins" / "imageformats" / "qico.dll"]
+    (qt / "plugins" / "multimedia").mkdir(parents=True)
+    keep += [qt / "Qt6Multimedia.dll", qt / "plugins" / "multimedia" / "windowsmediaplugin.dll"]
     gone = [qt / "opengl32sw.dll", qt / "Qt6Pdf.dll", qt / "translations" / "qtbase_de.qm",
-            qt / "Qt6Multimedia.dll", qt / "avcodec-61.dll", qt / "swscale-8.dll",
+            qt / "avcodec-61.dll", qt / "swscale-8.dll", qt / "plugins" / "multimedia" / "ffmpegmediaplugin.dll",
             qt / "plugins" / "imageformats" / "qpdf.dll"]
     for p in keep + gone:
         p.write_bytes(b"12345")

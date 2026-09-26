@@ -11,6 +11,13 @@ SPEEDS = (1, 2, 4, 8)
 SIZES = ("small", "medium", "large")
 SIZE_NAMES = {"small": "Маленький (80 м)", "medium": "Средний (160 м)", "large": "Большой (320 м)"}
 WORLD_WIDTH = {"small": 80.0, "medium": 160.0, "large": 320.0}
+GUITAR_MODES = ("musician", "hands")
+GUITAR_MODE_NAMES = {"musician": "Музыкант", "hands": "Руками"}
+GUITAR_FREQS = ("rare", "sometimes", "often")
+GUITAR_FREQ_NAMES = {"rare": "Редко", "sometimes": "Иногда", "often": "Часто"}
+GUITAR_FAST = ("slow", "silent")
+GUITAR_FAST_NAMES = {"slow": "Жизнь идёт в x1 - слышно каждую попытку",
+                     "silent": "Скорость не меняется, попытки на x2-x8 - без звука"}
 
 
 @dataclass
@@ -21,6 +28,10 @@ class Settings:
     show_vision: bool = True     # «что видит»: лучи, интерес, намерение, сводка
     theme: str = "dark"
     world_size: str = "medium"
+    volume: int = 60             # 0..100, 0 - звуковое устройство не открывается
+    guitar_mode: str = "musician"
+    guitar_freq: str = "sometimes"
+    guitar_fast: str = "slow"    # что делать со скоростью, пока он играет
 
     @staticmethod
     def valid(name, value):
@@ -31,6 +42,10 @@ class Settings:
             "show_vision": lambda v: isinstance(v, bool),
             "theme": lambda v: v in THEMES,
             "world_size": lambda v: v in SIZES,
+            "volume": lambda v: is_int(v) and 0 <= v <= 100,
+            "guitar_mode": lambda v: v in GUITAR_MODES,
+            "guitar_freq": lambda v: v in GUITAR_FREQS,
+            "guitar_fast": lambda v: v in GUITAR_FAST,
         }
         try:
             return checks[name](value)

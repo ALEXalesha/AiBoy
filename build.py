@@ -22,11 +22,12 @@ ROOT = os.path.abspath(os.path.dirname(__file__))
 
 # Игре не нужны: без них сборка меньше. PIL нужен только build.py - для иконки.
 EXCLUDE = ("torch", "torchvision", "scipy", "sklearn", "matplotlib", "PIL", "IPython", "notebook",
-           "pandas", "pytest", "tkinter", "pygame", "PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets")
-# Звуков в AiBoy нет (решение владельца 26.09.2026): QtMultimedia и ffmpeg в сборке не нужны.
+           "pandas", "pytest", "tkinter", "pygame", "PySide6.QtMultimediaWidgets")
+# Голоса нет, а гитаре (1.1.0) нужен только QAudioSink: Qt6Multimedia и бэкенд windows. Пять
+# библиотек ffmpeg и его плагин - нет (game/audio.py выбирает бэкенд windows).
 # PyInstaller кладёт библиотеки Qt по зависимостям плагинов - они убираются после сборки.
-DROP_PREFIXES = ("Qt6Multimedia", "avcodec", "avformat", "avutil", "swresample", "swscale",
-                 "QtMultimedia")
+DROP_PREFIXES = ("avcodec", "avformat", "avutil", "swresample", "swscale", "ffmpegmediaplugin",
+                 "Qt6MultimediaWidgets", "Qt6MultimediaQuick", "QtMultimediaWidgets")
 
 
 def version():
@@ -83,10 +84,9 @@ def trim(folder):
               os.path.join(qt, "plugins", "imageformats", "qpdf.dll")]
     if os.path.isdir(qt):
         doomed += [os.path.join(qt, n) for n in os.listdir(qt) if n.startswith(DROP_PREFIXES)]
-    for sub in ("multimedia",):
-        plug = os.path.join(qt, "plugins", sub)
-        if os.path.isdir(plug):
-            doomed += [os.path.join(plug, n) for n in os.listdir(plug)]
+    plug = os.path.join(qt, "plugins", "multimedia")
+    if os.path.isdir(plug):
+        doomed += [os.path.join(plug, n) for n in os.listdir(plug) if n.startswith(DROP_PREFIXES)]
     translations = os.path.join(qt, "translations")
     if os.path.isdir(translations):
         doomed += [os.path.join(translations, n) for n in os.listdir(translations) if not n.endswith("_ru.qm")]

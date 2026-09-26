@@ -1,0 +1,120 @@
+{
+ "what": "плотная сеть 27 -> 24 -> 7: сводка состояния мозга -> параметры синтезатора",
+ "teacher": "teacher/voice.py - только при обучении",
+ "params": [
+  "pitch",
+  "glide",
+  "notes",
+  "length",
+  "vowel",
+  "vibrato",
+  "bright"
+ ],
+ "states": 5500,
+ "steps": 4000,
+ "curve": [
+  {
+   "step": 1,
+   "loss": 0.08865
+  },
+  {
+   "step": 501,
+   "loss": 0.01286
+  },
+  {
+   "step": 1001,
+   "loss": 0.01219
+  },
+  {
+   "step": 1501,
+   "loss": 0.0107
+  },
+  {
+   "step": 2001,
+   "loss": 0.0105
+  },
+  {
+   "step": 2501,
+   "loss": 0.00923
+  },
+  {
+   "step": 3001,
+   "loss": 0.00933
+  },
+  {
+   "step": 3501,
+   "loss": 0.00958
+  },
+  {
+   "step": 4000,
+   "loss": 0.01008
+  }
+ ],
+ "check_new_states_mse": 0.0069,
+ "by_state": {
+  "упал": {
+   "params": {
+    "pitch": 0.047,
+    "glide": 0.012,
+    "notes": 0.443,
+    "length": 0.861,
+    "vowel": 0.08,
+    "vibrato": 0.539,
+    "bright": 0.18
+   },
+   "notes_hz": [
+    220.0,
+    196.0
+   ],
+   "seconds": 0.539
+  },
+  "любопытно": {
+   "params": {
+    "pitch": 0.453,
+    "glide": 0.721,
+    "notes": 0.66,
+    "length": 0.392,
+    "vowel": 0.195,
+    "vibrato": 0.375,
+    "bright": 0.493
+   },
+   "notes_hz": [
+    392.0,
+    440.0
+   ],
+   "seconds": 0.332
+  },
+  "прыжок": {
+   "params": {
+    "pitch": 0.825,
+    "glide": 0.931,
+    "notes": 0.025,
+    "length": 0.032,
+    "vowel": 0.946,
+    "vibrato": 0.031,
+    "bright": 0.669
+   },
+   "notes_hz": [
+    659.3
+   ],
+   "seconds": 0.174
+  },
+  "скучно": {
+   "params": {
+    "pitch": 0.347,
+    "glide": 0.351,
+    "notes": 0.475,
+    "length": 0.519,
+    "vowel": 0.304,
+    "vibrato": 0.325,
+    "bright": 0.36
+   },
+   "notes_hz": [
+    329.6,
+    293.7
+   ],
+   "seconds": 0.388
+  }
+ },
+ "seconds": 8.7
+}

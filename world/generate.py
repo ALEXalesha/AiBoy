@@ -91,7 +91,15 @@ class World:
         return self.heights[i] * (1 - t) + self.heights[(i + 1) % n] * t
 
     def height_at(self, x):
-        return float(self.heights_at(np.array([x]))[0])
+        """То же для одной точки - на чистом Python: физика зовёт это тысячи раз в секунду."""
+        hl = self.__dict__.get("_hl")
+        if hl is None:
+            hl = self._hl = self.heights.tolist()
+        u = (x % self.width) / self.dx
+        i = int(u)
+        t = u - i
+        n = len(hl)
+        return hl[i % n] * (1.0 - t) + hl[(i + 1) % n] * t
 
     def layer_at(self, layer, u):
         """Высота дальнего или среднего слоя гор в точке u (отсчёты через 1 м, кольцом)."""

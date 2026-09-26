@@ -131,7 +131,7 @@ def test_speech_net_save_and_load(tmp_path):
 
 def test_the_game_never_imports_the_teacher():
     """Главное условие проекта: учитель только при обучении, в игре - одни сети."""
-    for folder in ("world", "body", "brain", "speech", "voice", "game", "nn"):
+    for folder in ("world", "body", "brain", "speech", "game", "nn"):
         for path in (ROOT / folder).rglob("*.py"):
             text = path.read_text(encoding="utf-8")
             assert not re.search(r"^\s*(from|import)\s+teacher", text, re.M), path

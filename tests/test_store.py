@@ -16,19 +16,19 @@ JSONISH = st.recursive(st.none() | st.booleans() | st.integers() | st.floats(all
 def test_settings_defaults_and_roundtrip(tmp_path):
     path = tmp_path / "settings.json"
     s = Settings.load(path)
-    assert (s.volume, s.phrase_freq, s.speed, s.theme, s.world_size) == (60, "normal", 1, "dark", "medium")
-    s.volume, s.speed, s.theme, s.show_thoughts = 30, 4, "light", False
+    assert (s.phrase_freq, s.speed, s.theme, s.world_size) == ("normal", 1, "dark", "medium")
+    s.speed, s.theme, s.show_thoughts = 4, "light", False
     assert s.save(path)
     again = Settings.load(path)
-    assert (again.volume, again.speed, again.theme, again.show_thoughts) == (30, 4, "light", False)
+    assert (again.speed, again.theme, again.show_thoughts) == (4, "light", False)
 
 
 def test_each_broken_setting_falls_back_alone(tmp_path):
     path = tmp_path / "settings.json"
-    path.write_text(json.dumps({"volume": 500, "speed": 3, "theme": "pink", "phrase_freq": "often",
+    path.write_text(json.dumps({"speed": 3, "theme": "pink", "phrase_freq": "often",
                                 "show_thoughts": "yes", "world_size": "large"}), encoding="utf-8")
     s = Settings.load(path)
-    assert (s.volume, s.speed, s.theme, s.show_thoughts) == (60, 1, "dark", True)
+    assert (s.speed, s.theme, s.show_thoughts) == (1, "dark", True)
     assert s.phrase_freq == "often" and s.world_size == "large"
 
 
@@ -37,14 +37,14 @@ def test_settings_survive_any_garbage(tmp_path_factory, data):
     path = tmp_path_factory.mktemp("s") / "settings.json"
     path.write_text(json.dumps(data), encoding="utf-8")
     s = Settings.load(path)
-    for name in ("volume", "phrase_freq", "speed", "show_thoughts", "theme", "world_size"):
+    for name in ("phrase_freq", "speed", "show_thoughts", "theme", "world_size"):
         assert Settings.valid(name, getattr(s, name))
 
 
 def test_truncated_files_give_defaults(tmp_path):
     for name, cls in (("settings.json", Settings), ("stats.json", Stats), ("gallery.json", Gallery)):
         path = tmp_path / name
-        path.write_text('{"volume": 3', encoding="utf-8")
+        path.write_text('{"speed": 3', encoding="utf-8")
         cls.load(path)
 
 
@@ -54,10 +54,9 @@ def test_stats_count_life(tmp_path):
     s.add_life(30.0, 12.5)
     s.add_phrase("вижу синее дерево справа")
     s.add_phrase("синее дерево!")
-    s.add_sound()
     s.add_event("jump")
     s.add_event("fall")
-    assert (s.worlds, s.lived, s.distance, s.phrases, s.sounds, s.jumps, s.falls) == (1, 30.0, 12.5, 2, 1, 1, 1)
+    assert (s.worlds, s.lived, s.distance, s.phrases, s.jumps, s.falls) == (1, 30.0, 12.5, 2, 1, 1)
     assert set(s.top_words(2)) == {("синее", 2), ("дерево", 2)}
     assert "вижу" in s.words and all(len(w) >= 3 for w in s.words)
     path = tmp_path / "stats.json"

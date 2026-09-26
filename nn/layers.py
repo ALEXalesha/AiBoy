@@ -62,7 +62,7 @@ def sigmoid(x):
 
 
 class Sigmoid:
-    """Выход в (0, 1): параметры звука, доли, вероятности."""
+    """Выход в (0, 1): доли, вероятности."""
 
     def forward(self, x):
         self.y = sigmoid(x)

@@ -7,7 +7,7 @@ import build
 from game.version import VERSION
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODELS = ("world", "body", "speech", "voice", "brain")
+MODELS = ("world", "body", "speech", "brain")
 
 
 def nsi():
@@ -51,9 +51,10 @@ def test_trim_removes_only_what_the_app_does_not_need(tmp_path):
     qt = tmp_path / "_internal" / "PySide6"
     (qt / "translations").mkdir(parents=True)
     (qt / "plugins" / "imageformats").mkdir(parents=True)
-    keep = [qt / "Qt6Core.dll", qt / "Qt6Multimedia.dll", qt / "translations" / "qtbase_ru.qm",
+    keep = [qt / "Qt6Core.dll", qt / "Qt6Gui.dll", qt / "translations" / "qtbase_ru.qm",
             qt / "plugins" / "imageformats" / "qico.dll"]
     gone = [qt / "opengl32sw.dll", qt / "Qt6Pdf.dll", qt / "translations" / "qtbase_de.qm",
+            qt / "Qt6Multimedia.dll", qt / "avcodec-61.dll", qt / "swscale-8.dll",
             qt / "plugins" / "imageformats" / "qpdf.dll"]
     for p in keep + gone:
         p.write_bytes(b"12345")

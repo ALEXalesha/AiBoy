@@ -14,7 +14,6 @@ import paths
 from body import cppn as body_cppn
 from brain.brain import Brain
 from speech.net import SpeechNet
-from voice.net import VoiceNet
 from world import cppn as world_cppn
 
 
@@ -23,7 +22,6 @@ class Models:
     world_genome: np.ndarray
     body_genome: np.ndarray
     speech: SpeechNet
-    voice: VoiceNet
     trained: dict = field(default_factory=dict)
 
 
@@ -68,14 +66,8 @@ def load():
         trained["speech"] = True
     except (OSError, KeyError, ValueError):
         trained["speech"] = False
-    voice = VoiceNet(seed=0)
-    try:
-        voice.load(model_path("voice.npz"))
-        trained["voice"] = True
-    except (OSError, KeyError, ValueError):
-        trained["voice"] = False
     trained["brain"] = os.path.exists(model_path("brain.npz"))
-    _cache = Models(world, body, speech, voice, trained)
+    _cache = Models(world, body, speech, trained)
     return _cache
 
 

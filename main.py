@@ -5,7 +5,7 @@
 
 Самопроверка нужна прежде всего собранному exe: он без консоли, поэтому итог пишется в
 файл. Окно создаётся offscreen, данные - во временной папке (настройки, галерея и мозг
-пользователя не трогаются): мир, человечек, 300 шагов жизни, фраза, звук.
+пользователя не трогаются): мир, человечек, 300 шагов жизни, фраза.
 """
 import argparse
 import os
@@ -60,12 +60,6 @@ def selftest(out_path):
         if not text.strip():
             raise RuntimeError("сеть речи не сказала ни буквы")
         lines.append(f"фраза: «{text}»")
-        samples, params = life.voice()
-        path = window.player.play(samples)
-        peak = float(np.abs(samples).max())
-        if not (0.05 < peak <= 1.0) or path is None:
-            raise RuntimeError("звук не синтезировался")
-        lines.append(f"звук: {len(samples) / 22050:.2f} с, пик {peak:.2f}, файл {os.path.basename(str(path))}")
         image = window.grab().toImage()
         if image.isNull() or image.width() < 400:
             raise RuntimeError("окно не нарисовалось")
@@ -85,7 +79,7 @@ def selftest(out_path):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="AiBoy - живой аквариум с нейросетью")
     ap.add_argument("--selftest", metavar="ФАЙЛ", nargs="?", const="selftest.txt",
-                    help="без окна: мир, человечек, 300 шагов жизни, фраза и звук; итог в файл")
+                    help="без окна: мир, человечек, 300 шагов жизни и фраза; итог в файл")
     args = ap.parse_args(argv)
     if args.selftest:
         return selftest(args.selftest)

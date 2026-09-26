@@ -1,11 +1,11 @@
-"""Статистика за всё время: миры, прожитое время, путь, фразы, звуки, прыжки, падения,
+"""Статистика за всё время: миры, прожитое время, путь, фразы, прыжки, падения,
 частые слова и кривая обучения мозга (средняя награда любопытства по прожитому времени).
 Битый файл - пустая статистика, битое поле - ноль."""
 import math
 
 from game.storage import is_int, load_json, save_json
 
-COUNTS = ("worlds", "phrases", "sounds", "jumps", "falls")
+COUNTS = ("worlds", "phrases", "jumps", "falls")
 AMOUNTS = ("lived", "distance")
 MAX_CURVE = 400
 MAX_WORDS = 300
@@ -22,7 +22,7 @@ def words_of(text):
 
 class Stats:
     def __init__(self):
-        self.worlds = self.phrases = self.sounds = self.jumps = self.falls = 0
+        self.worlds = self.phrases = self.jumps = self.falls = 0
         self.lived = self.distance = 0.0
         self.words = {}
         self.curve = []            # [[прожито секунд, средняя награда]]
@@ -41,9 +41,6 @@ class Stats:
         if len(self.words) > MAX_WORDS:
             keep = sorted(self.words.items(), key=lambda kv: -kv[1])[:MAX_WORDS // 2]
             self.words = dict(keep)
-
-    def add_sound(self):
-        self.sounds += 1
 
     def add_event(self, name):
         if name == "jump":

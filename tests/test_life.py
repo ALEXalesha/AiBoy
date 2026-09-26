@@ -3,7 +3,7 @@ import pytest
 
 from brain.brain import Brain
 from game import models
-from game.life import PHRASE_PAUSE, SOUND_PAUSE, Life
+from game.life import PHRASE_PAUSE, Life
 
 
 @pytest.fixture(scope="module")
@@ -47,18 +47,6 @@ def test_phrases_come_and_respect_the_pause(m):
     assert len(times) >= 3
     assert min(np.diff(times)) >= PHRASE_PAUSE["often"] - 1e-6
     assert len(life.phrases) == len(times)
-
-
-def test_sounds_are_synthesized_rarely(m):
-    life = make(m, freq="often", seed=3)
-    sounds = []
-    for _ in range(60 * 60):
-        for kind, *data in life.tick():
-            if kind == "sound":
-                sounds.append((life.time, data[0]))
-    assert 1 <= len(sounds) <= 60 / SOUND_PAUSE["often"] + 1
-    for _, samples in sounds:
-        assert samples.dtype == np.float32 and 0.1 < np.abs(samples).max() <= 1.0
 
 
 def test_rare_frequency_talks_less_than_often(m):

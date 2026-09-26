@@ -330,7 +330,8 @@ def _capsule(p, a, b, width, color):
     p.drawLine(a, b)
 
 
-def draw_human(p, f, human, t, speaking=0.0):
+def draw_human(p, f, human, t, speaking=0.0, guitar=None):
+    """guitar: None - без гитары, "back" - за спиной, "play" - играет (сидит)."""
     b = human.body
     pts = human.points()
     P = f.P
@@ -363,6 +364,8 @@ def draw_human(p, f, human, t, speaking=0.0):
         p.restore()
 
     fk = 1 - shade
+    if guitar == "back":
+        guitar_on_back(p, f, human)
     arm(far, fk)
     leg(far, fk)
     # корпус: таз в штанах, туловище в рубашке
@@ -378,6 +381,12 @@ def draw_human(p, f, human, t, speaking=0.0):
              P(chest_top), tw, qc(b.shirt))
     _capsule(p, P(neck), P((neck[0] - ux * 0.06, neck[1] - uy * 0.06)), 0.07 * m, qc(b.skin, 1, 0.92))
     leg(near, 1.0)
+    if guitar == "play":
+        guitar_in_hands(p, f, human)
+        # кисть дальней руки - на струнах, поверх корпуса
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(qc(b.skin, 1, fk))
+        p.drawEllipse(P(pts["ha_" + far]), b.arm_w * m * 0.6, b.arm_w * m * 0.6)
     arm(near, 1.0)
     draw_head(p, f, human, pts, t, speaking)
     return pts
@@ -457,6 +466,72 @@ def draw_head(p, f, human, pts, t, speaking):
         p.setPen(Qt.PenStyle.NoPen)
 
 
+# --- гитара ---
+
+WOOD = (0.78, 0.52, 0.27)
+WOOD_DARK = (0.36, 0.22, 0.12)
+
+
+def draw_guitar(p, f, center, axis, k=1.0):
+    """Гитара в мировых координатах: center - середина корпуса, axis - единичный вектор от
+    корпуса к грифу, k - масштаб (по росту человечка)."""
+    ax, ay = axis
+    nx, ny = -ay, ax
+    m = f.ppm * k
+
+    def at(u, v):
+        return QPointF(f.X(center[0] + (ax * u + nx * v) * k), f.Y(center[1] + (ay * u + ny * v) * k))
+
+    p.save()
+    p.setPen(QPen(qc(WOOD_DARK), max(1.0, 0.01 * m)))
+    p.setBrush(qc(WOOD))
+    for u, r in ((-0.06, 0.13), (0.1, 0.095)):          # корпус - две округлости
+        c = at(u, 0.0)
+        p.drawEllipse(c, r * m, r * m)
+    p.setBrush(qc(WOOD_DARK))
+    p.drawEllipse(at(0.02, 0.0), 0.035 * m, 0.035 * m)   # розетка
+    neck = QPen(qc(WOOD_DARK), 0.04 * m)
+    neck.setCapStyle(Qt.PenCapStyle.FlatCap)
+    p.setPen(neck)
+    p.drawLine(at(0.12, 0.0), at(0.5, 0.0))
+    p.setPen(QPen(qc(WOOD), 0.055 * m, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(at(0.5, 0.0), at(0.58, 0.0))                # головка
+    p.setPen(QPen(QColor(235, 235, 225, 200), max(0.6, 0.004 * m)))
+    for v in (-0.012, 0.0, 0.012):
+        p.drawLine(at(-0.12, v), at(0.52, v))
+    p.restore()
+
+
+def guitar_on_back(p, f, human):
+    b = human.body
+    k = b.height() / 1.7
+    lean = human.angles[0]
+    up = (math.sin(lean) * human.facing, math.cos(lean))
+    back = (-human.facing * math.cos(lean), math.sin(lean))
+    center = (human.px + (up[0] * 0.28 + back[0] * 0.13) * k, human.py + (up[1] * 0.28 + back[1] * 0.13) * k)
+    tilt = 0.35
+    axis = (up[0] * math.cos(tilt) + back[0] * math.sin(tilt), up[1] * math.cos(tilt) + back[1] * math.sin(tilt))
+    draw_guitar(p, f, center, axis, k * 0.9)
+
+
+def guitar_in_hands(p, f, human):
+    from music import hands
+    b = human.body
+    k = b.height() / 1.7
+    cx, cy = hands.body_center(b)
+    ax, ay = hands.axis()
+    center = (human.px + human.facing * cx, human.py + cy)
+    draw_guitar(p, f, center, (human.facing * ax, ay), k * 0.95)
+
+
+def guitar_lying(p, f, world, x):
+    x = unwrap(x, f.cam_x, world.width)
+    if abs(x - f.cam_x) > f.half + 1:
+        return
+    y = world.height_at(x) + 0.12
+    draw_guitar(p, f, (x, y), (1.0, 0.0), 0.9)
+
+
 # --- пузырь и мысли ---
 
 def draw_bubble(p, f, head, text, alpha, colors):
@@ -525,7 +600,8 @@ def draw_thoughts(p, f, head, items, colors):
 
 # --- кадр целиком ---
 
-def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thoughts=None):
+def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thoughts=None, guitar=None,
+               guitar_x=None):
     f = Frame(rect, cam_x, cam_y)
     p.save()
     p.setClipRect(rect)
@@ -541,6 +617,8 @@ def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thou
     p.fillRect(rect, haze)
     draw_ground(p, f, world, t)
     draw_entities(p, f, world, t, human.px if human else None)
+    if guitar_x is not None:
+        guitar_lying(p, f, world, guitar_x)
     if human is not None:
         # тень под ногами
         gy = world.height_at(human.px)
@@ -549,7 +627,7 @@ def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thou
         p.setBrush(QColor(0, 0, 0, int(60 / (1 + lift))))
         p.drawEllipse(QPointF(f.X(human.px), f.Y(gy) + 0.03 * f.ppm), 0.35 * f.ppm / (1 + 0.3 * lift),
                       0.07 * f.ppm)
-        pts = draw_human(p, f, human, t, speech[1] if speech else 0.0)
+        pts = draw_human(p, f, human, t, speech[1] if speech else 0.0, guitar)
         head = f.P((pts["head"][0], pts["head"][1] + human.body.head_r))
         if thoughts:
             draw_thoughts(p, f, head, thoughts, colors)
@@ -677,10 +755,16 @@ class WorldView(QWidget):
             return
         life = self.life
         thoughts = thoughts_of(life.decision, life.brain.curiosity, life.intent) if self.show_thoughts else None
+        guitar = None
+        if getattr(life, "has_guitar", False):
+            guitar = "play" if life.playing and life.attempt is not None else "back"
+        lying = getattr(life, "guitar_x", None) if not getattr(life, "has_guitar", True) else None
+        if getattr(life, "playing", False):
+            thoughts = None
         f = draw_scene(p, rect, life.world, life.human, self.cam_x, self.cam_y, self.clock, self.colors,
-                       speech=(life.last_phrase, life.speaking), thoughts=thoughts)
+                       speech=(life.last_phrase, life.speaking), thoughts=thoughts, guitar=guitar, guitar_x=lying)
         self.vision_rect = None
-        if self.show_vision:
+        if self.show_vision and not getattr(life, "playing", False):
             # раз в кадр, а не на каждый шаг жизни: на x8 это та же цена
             self.perception = perceive(life)
             if self.perception is not None:

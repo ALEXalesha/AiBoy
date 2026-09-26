@@ -120,3 +120,37 @@ def test_guitar_settings_are_saved(win):
     saved = json.loads(open(paths.user_file("settings.json"), encoding="utf-8").read())
     assert (saved["guitar_mode"], saved["guitar_freq"], saved["volume"]) == ("hands", "often", 0)
     assert win.observe.life.guitarist.mode == "hands" and win.observe.life.mood.freq == "often"
+
+
+def changed_pixels(a, b, step=2):
+    n = 0
+    for x in range(0, a.width(), step):
+        for y in range(0, a.height(), step):
+            if a.pixel(x, y) != b.pixel(x, y):
+                n += 1
+    return n
+
+
+def test_guitar_is_drawn_lying_on_his_back_and_in_his_hands(win):
+    life = win.observe.life
+    view = win.observe.view
+    win.observe.advance(20)
+    far = life.guitar_x
+    life.guitar_x = life.human.px + life.world.width / 2      # за краем экрана
+    bare = view.grab().toImage()
+    life.guitar_x = life.human.px + 0.8
+    lying = view.grab().toImage()
+    assert changed_pixels(bare, lying) > 20
+    life.guitar_x = far
+    life.has_guitar = True
+    back = view.grab().toImage()
+    assert changed_pixels(bare, back) > 20
+    bore(win)
+    assert play_until(win, "sit")
+    for _ in range(30):
+        win.observe.tick()
+    playing = view.grab().toImage()
+    life.has_guitar = False
+    life.guitar_x = life.human.px + life.world.width / 2
+    no_guitar = view.grab().toImage()
+    assert changed_pixels(no_guitar, playing) > 20

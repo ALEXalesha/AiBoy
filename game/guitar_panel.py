@@ -22,12 +22,12 @@ class NeckView(QWidget):
         self.colors = colors
         self.attempt = None
         self.t = 0.0
-        self.setMinimumHeight(104)
+        self.setMinimumHeight(124)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def sizeHint(self):
         from PySide6.QtCore import QSize
-        return QSize(600, 110)
+        return QSize(600, 124)
 
     def set_attempt(self, attempt):
         self.attempt = attempt
@@ -57,7 +57,7 @@ class NeckView(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         col = self.colors
         w, h = self.width(), self.height()
-        neck = QRectF(28, 4, w - 36, 52)
+        neck = QRectF(36, 4, w - 44, 66)
         # лады: положения как у настоящей гитары, но растянуты на ширину
         def fret_x(k):
             full = 1.0 - 2.0 ** (-12 / 12.0)
@@ -90,19 +90,19 @@ class NeckView(QWidget):
                        + (1.5 if glow else 0))
             p.setPen(pen)
             y = string_y(s)
-            p.drawLine(QPointF(neck.left() - 20, y), QPointF(neck.right(), y))
+            p.drawLine(QPointF(neck.left() - 6, y), QPointF(neck.right(), y))
             p.setPen(QColor(col["muted"]))
-            p.drawText(QRectF(0, y - 7, 18, 14), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+            p.drawText(QRectF(0, y - 6, 14, 12), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                        "EADGBE"[s])
         if last is not None:
             s, f, snd, _ = last
-            x = neck.left() - 10 if f == 0 else (fret_x(f - 1) + fret_x(f)) / 2
+            x = neck.left() - 11 if f == 0 else (fret_x(f - 1) + fret_x(f)) / 2
             dot = QColor(col["accent"]) if snd == 1 else QColor(col["bad"])
             p.setPen(QPen(QColor("#ffffff"), 1.5))
             p.setBrush(dot if snd else Qt.BrushStyle.NoBrush)
             p.drawEllipse(QPointF(x, string_y(s)), 7, 7)
         # строка нот попытки
-        roll = QRectF(28, neck.bottom() + 6, w - 36, h - neck.bottom() - 10)
+        roll = QRectF(36, neck.bottom() + 6, w - 44, h - neck.bottom() - 10)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(col["surface2"]))
         p.drawRoundedRect(roll, 4, 4)

@@ -34,8 +34,8 @@ from nn.rnn import RNNCell
 HIDDEN = 64
 N_ACT = len(skeleton.JOINTS) + 1            # суставы и направление
 GAMMA = 0.95
-SIGMA = 0.3
-RHO = 0.9                                   # корреляция шума между шагами
+SIGMA = 0.22
+RHO = 0.95                                  # корреляция шума между шагами (~0.7 с)
 CUR_SCALE = 0.1
 ALIVE = 0.01
 FALL_PENALTY = -1.0

@@ -23,7 +23,8 @@ from game.chat import ChatView, clock
 from game.gallery import Gallery, make_entry
 from game.icon import app_icon
 from game.life import Life
-from game.settings import FREQ_NAMES, SIZE_NAMES, SPEEDS, WORLD_WIDTH, Settings
+from game.settings import (FREQ_NAMES, GUITAR_FAST_NAMES, GUITAR_FREQ_NAMES, GUITAR_MODE_NAMES, SIZE_NAMES,
+                           SPEEDS, WORLD_WIDTH, Settings)
 from game.stats import Stats
 from game.version import VERSION
 from game.view import WorldView, draw_scene, thumbnail
@@ -31,6 +32,9 @@ from game.window_state import WindowMemory
 from game.ui import Page, button, card, label, meters, plural, segmented
 from game.audio import AudioOut
 from game.keyboard import KeyboardPage
+from game import guitar_store as gstore
+from game.guitar_panel import GuitarPanel
+from game.attempts import AttemptsPage
 from music.songbook import Songbook
 from music.string import shared_bank
 from body.cppn import generate_body
@@ -49,9 +53,11 @@ ABOUT = ("Этот мир и человечка в нём придумали н�
          "Он учится из любопытства: ищет то, чего ещё не знает.\n"
          "Его мысли появляются в чате сверху,\n"
          "а миры и человечки сохраняются в галерее.")
+CHAT_HEIGHT = 150
+CHAT_HEIGHT_PLAYING = 104
 RECENT_NAMES = 12             # столько последних миров не повторяют имя нового
-PAGES = (("observe", "Наблюдение"), ("gallery", "Галерея"), ("teach", "Научить мелодии"), ("stats", "Статистика"),
-         ("settings", "Настройки"))
+PAGES = (("observe", "Наблюдение"), ("gallery", "Галерея"), ("attempts", "Попытки"), ("teach", "Научить мелодии"),
+         ("stats", "Статистика"), ("settings", "Настройки"))
 
 
 # --- меню ---
@@ -150,13 +156,16 @@ class ObservePage(Page):
         root.setSpacing(theme.GAP_BIG)
         left = QVBoxLayout()
         left.setSpacing(theme.GAP)
-        chat_card = card()
-        chat_card.setFixedHeight(150)
+        self.chat_card = chat_card = card()
+        chat_card.setFixedHeight(CHAT_HEIGHT)
         cl = QVBoxLayout(chat_card)
         cl.setContentsMargins(2, 2, 2, 2)
         self.chat = ChatView()
         cl.addWidget(self.chat)
         left.addWidget(chat_card)
+        self.guitar_panel = GuitarPanel(window)
+        self.guitar_panel.hide()
+        left.addWidget(self.guitar_panel)
         self.view = WorldView(window.colors())
         self.view.show_thoughts = s.show_thoughts
         self.view.show_vision = s.show_vision
@@ -224,8 +233,12 @@ class ObservePage(Page):
     def start(self, world_seed, body_seed, width=None, entry_id=None):
         w = self.window_
         self.flush_life()
+        self.save_guitar()
         width = width or WORLD_WIDTH[w.settings.world_size]
-        self.life = Life(w.models, world_seed, body_seed, width, w.brain, frequency=w.settings.phrase_freq)
+        g = gstore.load(body_seed, w.songbook, mode=w.settings.guitar_mode)
+        self.life = Life(w.models, world_seed, body_seed, width, w.brain, frequency=w.settings.phrase_freq,
+                         guitarist=g, has_guitar=gstore.has_guitar(g), guitar_freq=w.settings.guitar_freq)
+        self.show_guitar(False)
         self.counted_time = self.counted_dist = 0.0
         self.view.set_life(self.life)
         self.chat.clear_messages(f"{self.life.body.name} в мире {self.life.world.name}. Здесь появятся его фразы")
@@ -269,6 +282,29 @@ class ObservePage(Page):
         if seed is None:
             seed = self.fresh_seed(lambda s: generate_body(m.body_genome, s).name, "human")
         self.start(world, int(seed), width)
+
+    def save_guitar(self):
+        life = self.life
+        if life is not None and life.guitarist is not None:
+            gstore.set_has_guitar(life.guitarist, life.has_guitar)
+            gstore.save(life.guitarist)
+
+    def show_guitar(self, on):
+        self.guitar_panel.setVisible(on)
+        self.chat_card.setFixedHeight(CHAT_HEIGHT_PLAYING if on else CHAT_HEIGHT)
+
+    def effective_speed(self):
+        """Пока он играет, жизнь идёт в x1, чтобы каждую попытку было слышно (настройка «x8 во
+        время игры» может это отключить - тогда попытки на скорости идут без звука)."""
+        life = self.life
+        if life is not None and life.playing and self.window_.settings.guitar_fast == "slow":
+            return 1
+        return self.speed
+
+    def after_rating(self, rating):
+        """Оценка законченной попытке (в идущую попадёт вместе с попыткой - add_attempt)."""
+        self.save_guitar()
+        self.window_.stats.guitar_rating(rating)
 
     def flush_life(self):
         """Итоги текущей жизни - в статистику и галерею."""
@@ -319,11 +355,14 @@ class ObservePage(Page):
             # жизнь считается пачками по DT; на кадр - не дольше FRAME_BUDGET, чтобы окно
             # успевало рисовать и на x8. Не успели - остаток досчитается в следующих кадрах
             # (но не больше MAX_BACKLOG: после долгой заминки время не нагоняется рывком).
-            self.acc = min(self.acc + dt * self.speed, MAX_BACKLOG * self.speed)
+            speed = self.effective_speed()
+            self.acc = min(self.acc + dt * speed, MAX_BACKLOG * speed)
             started = time.perf_counter()
             while self.acc >= DT and time.perf_counter() - started < FRAME_BUDGET:
                 self.acc -= DT
                 self.tick()
+        if self.life is not None and self.life.playing:
+            self.guitar_panel.neck.set_time(self.life.play_t)
         self.panel_clock += dt
         if self.panel_clock >= 0.5:
             self.panel_clock = 0.0
@@ -351,6 +390,25 @@ class ObservePage(Page):
                 w.stats.add_phrase(data[0])
             elif kind in ("jump", "fall"):
                 w.stats.add_event(kind)
+            elif kind == "pickup":
+                self.save_guitar()
+            elif kind == "sit":
+                self.show_guitar(True)
+            elif kind == "attempt_start":
+                attempt = data[0]
+                self.guitar_panel.set_attempt(attempt)
+                if self.effective_speed() == 1:
+                    # звук попытки - сразу целиком в микшер; струны из кэша, это миллисекунды
+                    w.audio.play(w.bank.render(attempt.notes(), attempt.duration),
+                                 f"попытка {life.guitarist.journal.next_id}")
+            elif kind == "attempt":
+                self.guitar_panel.set_result(data[0])
+                w.stats.add_attempt(data[0], life.guitarist.journal.best(data[0].get("tune")))
+                self.save_guitar()
+            elif kind == "stand":
+                self.show_guitar(False)
+        if life.playing:
+            w.stats.guitar_time += DT
         self.curve_clock += DT
         if self.curve_clock >= CURVE_EVERY:
             self.curve_clock = 0.0
@@ -544,7 +602,7 @@ class StatsPage(Page):
         row.setSpacing(theme.GAP)
         self.big = {}
         for key, text in (("worlds", "миров"), ("lived", "прожито"), ("distance", "пройдено"),
-                          ("phrases", "фраз"), ("jumps", "прыжков"), ("falls", "падений")):
+                          ("phrases", "фраз"), ("jumps", "прыжков"), ("attempts", "попыток")):
             c = card()
             cl = QVBoxLayout(c)
             cl.setContentsMargins(theme.PAD, 12, theme.PAD, 12)
@@ -565,6 +623,18 @@ class StatsPage(Page):
         self.brain_note = label("", "hint", wrap=True)
         ll.addWidget(self.brain_note)
         col.addWidget(learn)
+
+        gcard = card()
+        gl = QVBoxLayout(gcard)
+        gl.setContentsMargins(18, 14, 18, 14)
+        gl.addWidget(label("Гитара", "section"))
+        self.guitar_line = label("", "muted", wrap=True)
+        gl.addWidget(self.guitar_line)
+        self.tunes = table(["Мелодия", "Лучшая похожесть"])
+        gl.addWidget(self.tunes)
+        self.taste_line = label("", "hint", wrap=True)
+        gl.addWidget(self.taste_line)
+        col.addWidget(gcard)
 
         two = QHBoxLayout()
         two.setSpacing(theme.GAP_BIG)
@@ -599,13 +669,27 @@ class StatsPage(Page):
         self.big["worlds"].setText(str(s.worlds))
         self.big["lived"].setText(clock(s.lived))
         self.big["distance"].setText(meters(s.distance))
-        for k in ("phrases", "jumps", "falls"):
+        for k in ("phrases", "jumps", "attempts"):
             self.big[k].setText(str(getattr(s, k)))
+        self.guitar_line.setText(f"С гитарой - {clock(s.guitar_time)}, попыток {s.attempts}, "
+                                 f"оценок 👍 {s.likes} и 👎 {s.dislikes}, падений в мире - {s.falls}.")
+        best = sorted(s.best.items(), key=lambda kv: -kv[1])
+        self.tunes.setRowCount(len(best))
+        for r, (tune, v) in enumerate(best):
+            self.tunes.setItem(r, 0, QTableWidgetItem(tune))
+            self.tunes.setItem(r, 1, QTableWidgetItem(f"{v:.2f}"))
+        fit_height(self.tunes)
+        life = w.observe.life
+        acc = None
+        if life is not None and life.guitarist is not None:
+            acc = life.guitarist.taste.accuracy()
+        self.taste_line.setText("Вкус угадывает ваши оценки: " + (f"{acc * 100:.0f} % (догадка - до того, как "
+                                "увидел оценку)" if acc is not None else "пока оценок мало") + ".")
         self.chart.set_data(s.curve)
         b = w.brain
         pp = models.passport("brain").get("honest_training_time", {})
-        pre = (f" Стартовые веса учились при сборке {pp.get('wall_minutes', '?')} мин "
-               f"({pp.get('lived_hours', '?')} ч жизни в {pp.get('worlds', '?')} мирах).") if pp else ""
+        pre = (f" Стартовые веса учились при сборке {pp.get('wall_minutes', '?')} мин: эволюционная стратегия "
+               f"({pp.get('es_generations', '?')} поколений) и онлайн.") if pp else ""
         self.brain_note.setText(f"Всего шагов обучения мозга: {b.steps:,}.".replace(",", " ") + pre)
         top = s.top_words(10)
         self.words.setRowCount(len(top))
@@ -689,6 +773,15 @@ class SettingsPage(Page):
         self.volume.valueChanged.connect(self.on_volume)
         row(6, "Громкость", "Гитара и другие игрушки; 0 - звуковое устройство не открывается вовсе. "
             "Голоса у человечка нет", self.volume, self.volume_label)
+        self.guitar_mode = self.combo(GUITAR_MODE_NAMES, s.guitar_mode, "guitar_mode")
+        row(7, "Гитара: как играет", "«Музыкант» - сеть сама выбирает струну и лад, руки только показывают. "
+            "«Руками» - нота звучит, только если он дотянулся до лада и струны", self.guitar_mode)
+        self.guitar_freq = self.combo(GUITAR_FREQ_NAMES, s.guitar_freq, "guitar_freq")
+        row(8, "Как часто берёт гитару", "Сдвигает порог: насколько мир должен надоесть сильнее музыки",
+            self.guitar_freq)
+        self.guitar_fast = self.combo(GUITAR_FAST_NAMES, s.guitar_fast, "guitar_fast")
+        row(9, "Скорость, пока играет", "x2-x8 и гитара вместе: слушать каждую попытку или не сбавлять скорость",
+            self.guitar_fast)
         outer.addWidget(box)
         outer.addWidget(label("Всё сохраняется сразу.", "hint"))
         outer.addStretch(1)
@@ -765,8 +858,10 @@ class MainWindow(QMainWindow):
         self.stats_page = StatsPage(self)
         self.settings_page = SettingsPage(self)
         self.teach_page = KeyboardPage(self)
+        self.attempts_page = AttemptsPage(self)
         self.pages = {"menu": self.menu, "observe": self.observe, "gallery": self.gallery_page,
-                      "teach": self.teach_page, "stats": self.stats_page, "settings": self.settings_page}
+                      "attempts": self.attempts_page, "teach": self.teach_page, "stats": self.stats_page,
+                      "settings": self.settings_page}
         for page in self.pages.values():
             self.stack.addWidget(page)
         self.apply_theme(self.settings.theme)
@@ -835,6 +930,14 @@ class MainWindow(QMainWindow):
             self.observe.set_speed(value)
         elif name == "volume":
             self.audio.set_volume(value)
+        elif name == "guitar_mode":
+            life = self.observe.life
+            if life is not None and life.guitarist is not None:
+                life.guitarist.mode = value
+        elif name == "guitar_freq":
+            life = self.observe.life
+            if life is not None:
+                life.mood.freq = value
 
     def apply_theme(self, name):
         self.setStyleSheet(theme.qss(name))
@@ -875,6 +978,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.observe.set_running(False)
         self.observe.flush_life()
+        self.observe.save_guitar()
         self.save_brain()
         self.memory.save()
         self.settings.save(self.settings_path)

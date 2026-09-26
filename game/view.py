@@ -649,7 +649,7 @@ class WorldView(QWidget):
         self.perception = None
         self.paused = False
         self.clock = 0.0
-        self.setMinimumSize(420, 300)
+        self.setMinimumSize(420, 200)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def set_life(self, life):

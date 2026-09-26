@@ -195,11 +195,11 @@ Python-файлы - только инструментом Write/Edit.
 
 ### Task 8: выпуск 1.1.0
 
-- [ ] `game/version.py`, `installer.nsi` - 1.1.0; тесты сборки.
-- [ ] `main.py --selftest`: струна звучит своей высотой, попытка считается и сохраняется.
-- [ ] `tools/make_previews.py`: гриф с пальцами, «Попытки», клавиатура; `tools/make_audio.py`:
+- [x] `game/version.py`, `installer.nsi` - 1.1.0; тесты сборки.
+- [x] `main.py --selftest`: струна звучит своей высотой, попытка считается и сохраняется.
+- [x] `tools/make_previews.py`: гриф с пальцами, «Попытки», клавиатура; `tools/make_audio.py`:
   `docs/audio/*.wav` - первая попытка, после N, мелодия выучена.
-- [ ] README EN/RU, CHANGELOG, `docs/release-notes/v1.1.0.md`; мутационная проверка;
+- [x] README EN/RU, CHANGELOG, `docs/release-notes/v1.1.0.md`; мутационная проверка;
   сборка, самопроверка на exe; коммит.
 
 ## Замеры

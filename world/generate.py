@@ -10,11 +10,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from world import cppn
+from world import cppn, reach
 
 KINDS = ("tree", "bush", "stone", "flower", "mushroom", "crystal")
 DX = 0.25                     # шаг высот, м
 MIN_GAP = 2.0                 # сущности не ближе друг к другу, м
+MAX_FLATTEN = 12              # раз по 15 % - рельеф в 7 раз ниже, дальше не надо
 COMPANION = 5                 # отсчётов (1.25 м) - соседка у густого места
 SYLLABLES = ("ла", "ми", "ро", "ка", "ну", "ти", "се", "во", "ра", "лу", "ни", "ко", "та",
              "зе", "ри", "мо", "са", "пе", "лё", "ю", "да", "фи", "ор", "эль")
@@ -142,6 +143,11 @@ def name_from(values):
     return word[0].upper() + word[1:]
 
 
+def world_name(genome, seed):
+    """Только имя мира - без рельефа: его считает маленькая общая часть сети."""
+    return name_from(cppn.global_outputs(genome, cppn.seed_vector(seed))[cppn.G_NAME])
+
+
 def generate(genome, seed, width):
     z = cppn.seed_vector(seed)
     g = cppn.global_outputs(genome, z)
@@ -153,6 +159,13 @@ def generate(genome, seed, width):
     # лёгкое сглаживание (полметра) - защита от зубцов, форму холмов задаёт сеть
     h = _smooth_ring(np.tanh(out[:, cppn.T_HEIGHT]), 2.0) * amp
     heights = np.clip(h - h.mean(), -6.0, 6.0)
+    # защита от ям-ловушек: если откуда-то нельзя попасть во весь мир ни шагом, ни прыжком
+    # (world/reach.py), рельеф той же формы делается ниже - на 15 % за раз. Сеть мира
+    # отобрана так, что это редкость (2 мира из 60 на проверке), но закон - для всех миров.
+    flattened = 0
+    while flattened < MAX_FLATTEN and not reach.escapes(heights, DX).all():
+        heights = heights * 0.85
+        flattened += 1
     tone = np.tanh(out[:, cppn.T_TONE])
     grass = sig(out[:, cppn.T_GRASS])
 
@@ -194,5 +207,7 @@ def generate(genome, seed, width):
                     float(1.0 + 2.5 * cd[k]))
               for k in _local_maxima(cd, 1.0 - 0.75 * clouds_amount, xs[cidx], 10.0, width)]
 
-    return World(seed, width, heights, tone, grass, palette, night, float(0.1 + 0.8 * sig(g[cppn.G_SUN])),
-                 clouds_amount, far, mid, clouds, entities, name_from(g[cppn.G_NAME]))
+    world = World(seed, width, heights, tone, grass, palette, night, float(0.1 + 0.8 * sig(g[cppn.G_SUN])),
+                  clouds_amount, far, mid, clouds, entities, name_from(g[cppn.G_NAME]))
+    world.flattened = flattened
+    return world

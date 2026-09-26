@@ -109,3 +109,88 @@ def test_any_seed_gives_a_valid_world(seed):
     w = generate(cppn.random_genome(np.random.default_rng(1)), seed, 40.0)
     assert np.isfinite(w.heights).all()
     assert 0.0 <= interest.score(w)["total"] <= 1.0
+
+
+def ring(fn, n=640, dx=0.25):
+    w = World.__new__(World)
+    w.dx, w.width = dx, n * dx
+    w.heights = np.array([fn(i * dx) for i in range(n)], float)
+    w.palette = {"sky_top": (0.6, 0.8, 1.0), "sky_bottom": (0.6, 0.8, 1.0), "ground": (0.3, 0.5, 0.2),
+                 "ground_deep": (0.3, 0.5, 0.2), "grass": (0.3, 0.5, 0.2)}
+    w.entities = []
+    return w
+
+
+def pit(depth, half_width):
+    """Яма посреди ровного: стенки с уклоном depth / (0.25 * half_width) на четверти ширины."""
+    def fn(x):
+        d = abs(x - 80.0)
+        wall = 0.25 * half_width
+        if d < half_width - wall:
+            return -depth
+        if d < half_width:
+            return -depth * (half_width - d) / wall
+        return 0.0
+    return fn
+
+
+def test_a_deep_pit_with_steep_walls_is_a_trap():
+    from world import reach
+    w = ring(pit(2.0, 3.0))                         # 2 м вглубь, стенки уклоном 2.7
+    bottom = int(80.0 / 0.25)
+    assert any(abs(t - bottom) <= 3.0 / 0.25 for t in reach.traps(w))
+    assert reach.open_fraction(w) < 1.0
+    assert interest.score(w)["passable"] < 0.3
+
+
+def test_a_shallow_pit_is_jumped_out_of_and_a_gentle_one_is_walked_out_of():
+    from world import reach
+    assert reach.traps(ring(pit(0.7, 3.0))) == []            # мельче прыжка
+    assert reach.traps(ring(pit(2.0, 20.0))) == []           # пологие стенки: уклон 0.4
+
+
+def test_a_pit_with_one_gentle_side_is_not_a_trap():
+    from world import reach
+
+    def fn(x):
+        if x < 76:
+            return 0.0
+        if x < 78:
+            return -(x - 76)                          # крутая стенка: 2 м на 2 м
+        if x < 82:
+            return -2.0
+        if x < 90:
+            return -2.0 + (x - 82) * 0.25             # пологий выход: уклон 0.25
+        return 0.0
+    assert reach.traps(ring(fn)) == []
+
+
+def test_walk_climb_limit_matches_the_body():
+    """Предел подъёма шагом в reach.CLIMB - с запасом от того, что показывает физика:
+    походка с высоко поднятой ногой уверенно проходит склон CLIMB, на склоне вдвое круче
+    ползёт еле-еле, а втрое круче - застревает. Запас нужен: походка мозга хуже заученной."""
+    import sys
+    sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
+    from test_physics import Ground, settle
+    from body import skeleton
+    from body.cppn import generate_body, random_genome as bg
+    from body.physics import DT, Human
+    from world import reach
+
+    def pose(**kw):
+        a = skeleton.rest_angles()
+        for k, v in kw.items():
+            a[skeleton.JOINTS.index(k)] = v
+        return a
+    high = [pose(hip_l=1.3, kn_l=2.0, hip_r=-0.35, kn_r=0.05), pose(hip_l=0.6, kn_l=0.4, hip_r=-0.35, kn_r=0.05),
+            pose(hip_r=1.3, kn_r=2.0, hip_l=-0.35, kn_l=0.05), pose(hip_r=0.6, kn_r=0.4, hip_l=-0.35, kn_l=0.05)]
+    body = generate_body(bg(np.random.default_rng(2)), 5)
+
+    def climb(slope):
+        h = Human(body, Ground(lambda x: max(0.0, x - 3.0) * slope), x=1.0)
+        settle(h)
+        for i in range(int(12 / DT)):
+            h.step(high[(i // int(0.3 / DT)) % 4], turn=1.0)
+        return h.px
+    assert climb(reach.CLIMB) > 6.0
+    assert climb(3 * reach.CLIMB) < 5.5

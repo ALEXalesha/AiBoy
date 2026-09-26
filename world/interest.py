@@ -3,9 +3,12 @@
 Части, каждая от 0 до 1:
 
 - relief - разнообразие высот: стандартное отклонение от 0.8 до 3 м - лучше всего;
-- passable - проходимость: доля шагов по 0.5 м с перепадом не больше 0.45 м (ступенька,
-  которую нога берёт без прыжка): от 50 % - ноль до 95 % - полный балл; и каждая стена
-  (перепад больше 1 м на 0.5 м - не перепрыгнуть) на 100 м отнимает шестую часть;
+- passable - проходимость: доля шагов по 0.5 м с подъёмом не круче того, что тело берёт
+  шагом (reach.CLIMB, 0.25 м на 0.5 м): от 50 % - ноль до 97 % - полный балл; умножается на
+  квадрат доли мира, откуда можно попасть везде (reach.open_fraction: ям-ловушек нет -
+  единица; хоть одна ловушка - ещё и на 0.3), и каждая стена (перепад больше 1 м на 0.5 м) на 100 м отнимает шестую часть.
+  Первая версия считала ступенькой 0.45 м на 0.5 м - а тело шагом берёт только 0.25, и
+  человечек застревал в оврагах: выбраться из них можно было только прыжками;
 - contrast - небо у горизонта и земля различаются по яркости;
 - entities - сущностей от 10 до 28 на 100 м;
 - kinds - хотя бы 4 разных вида;
@@ -13,7 +16,9 @@
 """
 import numpy as np
 
-STEP = 0.45            # м - ступенька без прыжка
+from world import reach
+
+STEP = reach.CLIMB * 0.5   # м на 0.5 м - подъём шагом
 WALL = 1.0             # м на 0.5 м - уже не перепрыгнуть
 WEIGHTS = {"relief": 1.0, "passable": 2.0, "contrast": 1.0, "entities": 1.0, "kinds": 1.0, "pop": 1.0}
 
@@ -56,8 +61,10 @@ def walls_per_100m(world):
 def score(world):
     h = world.heights
     parts = {"relief": trapezoid(float(h.std()), 0.15, 0.8, 3.0, 5.0)}
-    walk = float(np.clip((passable_fraction(world) - 0.5) / 0.45, 0, 1))
-    parts["passable"] = walk * float(np.clip(1.0 - walls_per_100m(world) / 6.0, 0, 1))
+    walk = float(np.clip((passable_fraction(world) - 0.5) / 0.47, 0, 1))
+    walls = float(np.clip(1.0 - walls_per_100m(world) / 6.0, 0, 1))
+    opened = reach.open_fraction(world)
+    parts["passable"] = walk * walls * opened ** 2 * (1.0 if opened >= 1.0 else 0.3)
     p = world.palette
     parts["contrast"] = float(np.clip(abs(luma(p["sky_bottom"]) - luma(p["ground"])) / 0.3, 0, 1))
     per100 = len(world.entities) * 100.0 / world.width

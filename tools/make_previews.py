@@ -4,8 +4,8 @@
 
 Окно создаётся offscreen (Qt рисует в память), кадр снимается widget.grab() - без экрана
 и без чужих окон поверх. Данные - во временной папке, мозг - стартовый из models/, так что
-на кадрах то, что увидит человек при первом запуске: несколько миров, фразы в чате,
-серия кадров наблюдения подряд.
+на кадрах то, что увидит человек при первом запуске: меню, несколько миров, фразы в чате,
+«что видит», серия кадров наблюдения подряд.
 """
 import os
 import sys
@@ -89,7 +89,6 @@ def worlds_grid(window):
 def main():
     app = QApplication.instance() or QApplication([])
     window = MainWindow(autostart=False)
-    window.change_setting("volume", 0)
     window.change_setting("phrase_freq", "often")
     window.resize(*SIZE)
     window.show()
@@ -97,9 +96,12 @@ def main():
 
     worlds_grid(window)
 
-    # главный мир: пожил минуту, в чате фразы
+    # главный мир: пожил минуту, в чате фразы; сначала - меню поверх него
     obs.start(MAIN_WORLD, MAIN_BODY)
+    window.show_page("observe")
     obs.advance(60 * 60)
+    window.show_page("menu")
+    shot(window, "menu")
     for theme in ("dark", "light"):
         window.change_setting("theme", theme)
         window.show_page("observe")
@@ -107,7 +109,10 @@ def main():
         shot(window, "observe" + ("" if theme == "dark" else "_light"))
     window.change_setting("theme", "dark")
 
-    # серия кадров наблюдения: каждые полсекунды, с мыслями
+    # «что видит» крупно: вид мира без панели
+    shot(obs.view, "vision")
+    # серия кадров наблюдения: каждые полсекунды, с мыслями, без «что видит»
+    window.change_setting("show_vision", False)
     frames, caps = [], []
     for i in range(6):
         obs.advance(30)
@@ -115,6 +120,7 @@ def main():
                                                        Qt.TransformationMode.SmoothTransformation))
         caps.append(f"{obs.life.time:.1f} с")
     strip(frames, 3, "walk", caps)
+    window.change_setting("show_vision", True)
 
     window.show_page("gallery")
     shot(window, "gallery")

@@ -31,10 +31,15 @@ def test_vision_is_on_by_default_and_saved(win):
     assert win.observe.view.show_vision and win.settings.show_vision
 
 
-def test_overlay_is_built_from_the_brains_own_observation(win):
+@pytest.mark.parametrize("facing", [1, -1])
+def test_overlay_is_built_from_the_brains_own_observation(win, facing):
     obs = win.observe
     obs.advance(90)
     life = obs.life
+    life.human.facing = facing                   # глазами человечка - в обе стороны
+    life.human.turn_cd = 1.0
+    life.tick()
+    life.tick()
     per = perceive(life)
     o = life.last_obs
     for (x, y, _), off, v in zip(per.rays, ob.OFFSETS, o[ob.TERRAIN]):

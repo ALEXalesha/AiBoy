@@ -58,6 +58,13 @@ def test_rare_frequency_talks_less_than_often(m):
     assert counts["rare"] < counts["often"]
 
 
+def test_the_game_explores_with_the_small_noise(m):
+    from brain.brain import PLAY_NOISE, SIGMA
+    life = make(m, seed=8)
+    run(life, 4)
+    assert life.brain.prev[4] == pytest.approx(SIGMA * PLAY_NOISE)
+
+
 def test_without_learning_the_brain_stays_the_same(m):
     life = make(m, seed=6)
     life.learn = False

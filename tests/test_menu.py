@@ -115,6 +115,16 @@ def test_menu_shows_the_current_world_behind_and_fades_to_the_theme(win, theme_n
     assert corner.name().lstrip("#") == theme.palette(theme_name)["bg"].lstrip("#")
 
 
+def test_fresh_seed_skips_names_of_recent_worlds(win):
+    """Сеть выдаёт имена «Икс» и «Игрек» через одно зерно; «Икс» недавно был - берётся
+    только зерно с «Игреком»."""
+    from game.gallery import make_entry
+    win.gallery.add(make_entry(1, 2, 160.0, "Икс", "Том", 0.5))
+    for _ in range(30):
+        seed = win.observe.fresh_seed(lambda s: "Икс" if s % 2 else "Игрек", "world")
+        assert seed % 2 == 0
+
+
 def test_new_worlds_do_not_repeat_recent_names(win):
     for _ in range(app_module.RECENT_NAMES + 3):
         win.observe.new_world()

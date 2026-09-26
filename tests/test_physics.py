@@ -192,11 +192,15 @@ def test_turning_on_the_spot_is_not_a_way_to_travel(body):
     месте (бёдра зеркалятся), и дёрганье на месте никуда не ведёт."""
     h = Human(body, FLAT, x=0.0)
     settle(h)
-    for i in range(int(6 / DT)):
-        phase = (i // 12) % 2
+    turns = 0
+    for i in range(int(8 / DT)):
+        phase = (i // 30) % 2                    # полсекунды: желание держится дольше TURN_HOLD
         turn = 1.0 if phase == 0 else -1.0
+        before = h.facing
         h.step(pose(kn_l=1.6, hip_r=-0.4 if phase == 0 else 0.4, kn_r=0.1), turn=turn)
-    assert abs(h.px) < 1.0
+        turns += h.facing != before
+    assert turns >= 8                            # разворачивался по-настоящему
+    assert abs(h.px) < 1.0                       # со старой перестановкой стоп - 3.9 м
 
 
 def test_turns_are_not_more_often_than_the_pause(body):

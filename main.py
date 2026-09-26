@@ -5,7 +5,9 @@
 
 Самопроверка нужна прежде всего собранному exe: он без консоли, поэтому итог пишется в
 файл. Окно создаётся offscreen, данные - во временной папке (настройки, галерея и мозг
-пользователя не трогаются): мир, человечек, 300 шагов жизни, фраза.
+пользователя не трогаются): мир, человечек, 300 шагов жизни, фраза; гитара - струна ля
+звучит своей высотой (не дальше 5 центов, без перегруза), одна попытка сыграна, посчитана
+и после перезагрузки журнала на месте.
 """
 import argparse
 import os
@@ -60,6 +62,7 @@ def selftest(out_path):
         if not text.strip():
             raise RuntimeError("сеть речи не сказала ни буквы")
         lines.append(f"фраза: «{text}»")
+        guitar_check(life, lines)
         image = window.grab().toImage()
         if image.isNull() or image.width() < 400:
             raise RuntimeError("окно не нарисовалось")
@@ -76,10 +79,42 @@ def selftest(out_path):
     return code
 
 
+def guitar_check(life, lines):
+    import numpy as np
+
+    from game import guitar_store
+    from music import guitar, string
+    from music.journal import Journal
+
+    hz = guitar.freq(guitar.OPEN[1])
+    tone = string.pluck(hz)
+    cents, _ = string.cents_off(tone, hz)
+    peak = float(np.max(np.abs(tone)))
+    lines.append(f"струна ля ({hz:.0f} Гц): отклонение {cents:+.3f} центов, пик {peak:.2f}")
+    if abs(cents) > 5 or not 0.05 < peak < 1.0:
+        raise RuntimeError("струна звучит не своей высотой или с перегрузом")
+    g = life.guitarist
+    a = g.attempt(life.body)
+    entry, _, _ = g.finish(a, life.body)
+    audio = string.shared_bank().render(a.notes(), a.duration)
+    if len(audio) and float(np.max(np.abs(audio))) >= 1.0:
+        raise RuntimeError("попытка звучит с перегрузом")
+    what = f"похоже {entry['A']:.2f}" if entry.get("A") is not None else f"приятно {entry['B']:+.2f}"
+    lines.append(f"попытка {entry['id']} сыграна: «{entry.get('tune') or 'свободная'}», нот "
+                 f"{len(entry['notes'])}, {what}, {a.duration:.1f} с звука")
+    if not guitar_store.save(g):
+        raise RuntimeError("журнал гитары не сохранился")
+    again = Journal.load(g.journal.path)
+    n = len(again.entries)
+    lines.append(f"журнал после перезагрузки: {n} попытка")
+    if n != 1 or again.entries[0]["id"] != entry["id"]:
+        raise RuntimeError("попытка не сохранилась в журнал")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="AiBoy - живой аквариум с нейросетью")
     ap.add_argument("--selftest", metavar="ФАЙЛ", nargs="?", const="selftest.txt",
-                    help="без окна: мир, человечек, 300 шагов жизни и фраза; итог в файл")
+                    help="без окна: мир, человечек, 300 шагов жизни, фраза и гитара; итог в файл")
     args = ap.parse_args(argv)
     if args.selftest:
         return selftest(args.selftest)

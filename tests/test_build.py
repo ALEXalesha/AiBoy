@@ -16,7 +16,7 @@ def nsi():
 
 
 def test_version_is_the_same_in_the_game_and_the_installer():
-    assert build.version() == VERSION == "1.0.0"
+    assert build.version() == VERSION == "1.1.0"
 
 
 def test_installer_registers_under_the_app_name_in_russian():

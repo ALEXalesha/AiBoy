@@ -140,6 +140,24 @@ class StringBank:
 _shared = None
 
 
+def cents_off(samples, expected_hz):
+    """Отклонение основного тона от ожидаемого, центы, и доля этого пика в спектре: пик в
+    полутоне от ожидаемой частоты, с дополнением нулями и параболой по логарифму амплитуды.
+    Нужна самопроверке собранного exe."""
+    x = np.asarray(samples[int(0.05 * SR):int(1.05 * SR)], dtype=np.float64)
+    x = x * np.hanning(len(x))
+    n = len(x) * 8
+    spec = np.abs(np.fft.rfft(x, n))
+    freqs = np.fft.rfftfreq(n, 1 / SR)
+    band = (freqs > expected_hz * 2 ** (-1 / 12)) & (freqs < expected_hz * 2 ** (1 / 12))
+    idx = np.flatnonzero(band)
+    k = idx[np.argmax(spec[idx])]
+    a, b, c = np.log(spec[k - 1:k + 2] + 1e-12)
+    shift = 0.5 * (a - c) / (a - 2 * b + c)
+    f = (k + shift) * SR / n
+    return float(1200 * np.log2(f / expected_hz)), float(spec[k] / spec.max())
+
+
 def shared_bank():
     """Один кэш на процесс: окон может быть несколько (тесты), струны у всех одни."""
     global _shared

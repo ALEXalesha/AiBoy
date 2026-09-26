@@ -154,3 +154,17 @@ def test_guitar_is_drawn_lying_on_his_back_and_in_his_hands(win):
     life.guitar_x = life.human.px + life.world.width / 2
     no_guitar = view.grab().toImage()
     assert changed_pixels(no_guitar, playing) > 20
+
+
+def test_stats_show_the_tunes_table_only_after_he_played(win):
+    win.show_page("stats")
+    assert win.stats_page.tunes.isHidden()
+    win.show_page("observe")
+    bore(win)
+    play_until(win, "sit")
+    assert play_until(win, "attempt")
+    win.show_page("stats")
+    page = win.stats_page
+    assert win.stats.best                      # первая попытка - всегда мелодия, не свободная игра
+    assert not page.tunes.isHidden() and page.tunes.rowCount() == len(win.stats.best)
+    assert page.big["attempts"].text() == "1"

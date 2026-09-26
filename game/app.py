@@ -679,6 +679,7 @@ class StatsPage(Page):
             self.tunes.setItem(r, 0, QTableWidgetItem(tune))
             self.tunes.setItem(r, 1, QTableWidgetItem(f"{v:.2f}"))
         fit_height(self.tunes)
+        self.tunes.setVisible(bool(best))           # пока не играл - без пустой шапки таблицы
         life = w.observe.life
         acc = None
         if life is not None and life.guitarist is not None:

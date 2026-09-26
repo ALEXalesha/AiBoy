@@ -31,6 +31,7 @@ FREE_STEPS = 32
 FREE_EVERY = 4
 LEARNED = 0.85
 GIVE_UP = 300
+LEAD = 2                     # шагов сетки: столько руке на дорогу до ноты
 FPS = 60
 L_SH, L_EL = skeleton.JOINTS.index("sh_l"), skeleton.JOINTS.index("el_l")
 R_SH, R_EL = skeleton.JOINTS.index("sh_r"), skeleton.JOINTS.index("el_r")
@@ -151,6 +152,9 @@ class Guitarist:
         step_sec = 60.0 / tempo / 2.0
         frames = int(math.ceil(steps * step_sec * FPS)) + 1
         reacher = self.reacher if (self.mode == "hands" and self.reacher is not None) else Planned()
+        if hasattr(reacher, "trace"):
+            reacher.trace = {k: [] for k in reacher.trace}
+            reacher.prev = {k: None for k in reacher.prev}
         commands = []
         aims = []
         for t, s, f, force, d in intended:
@@ -158,18 +162,19 @@ class Guitarist:
             rt = hands.right_target(s, body)
             left = reacher.aim(body, lean, lt, "left")
             right = reacher.aim(body, lean, rt, "right")
-            start = int(max(0, t - 1) * step_sec * FPS)
+            start = int(max(0, t - LEAD) * step_sec * FPS)
             commands.append((start, (left[0], left[1], right[0], right[1])))
             # после удара правая рука чуть отходит от струн
             commands.append((int((t + 0.5) * step_sec * FPS), (left[0], left[1], right[0] - 0.15, right[1])))
             aims.append((t, s, f, lt, rt, left, right))
         arms = arm_track(body, commands, frames)
-        sounded, motor = [], []
+        sounded, motor, reached = [], [], []
         for (t, s, f, lt, rt, _, _) in aims:
             fr = min(frames - 1, int(t * step_sec * FPS))
             lp = hands.hand(body, lean, arms[fr, 0], arms[fr, 1])
             rp = hands.hand(body, lean, arms[fr, 2], arms[fr, 3])
             motor.append((math.dist(lp, lt), math.dist(rp, rt)))
+            reached.append((lp, rp))
             if self.mode != "hands":
                 sounded.append(1)
             elif not hands.right_hit(rp, s, body):
@@ -180,6 +185,8 @@ class Guitarist:
                 sounded.append(1)
         a = Attempt(tune, phrase, steps, meter, tempo, take, intended, sounded, arms, motor)
         a.aims = aims
+        a.reached = reached
+        a.lean = lean
         return a
 
     # --- после попытки ---

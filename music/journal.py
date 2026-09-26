@@ -41,8 +41,9 @@ def played(entry):
 
 
 class Journal:
-    def __init__(self, path, entries=None, next_id=1, guesses=0, hits=0):
+    def __init__(self, path, entries=None, next_id=1, guesses=0, hits=0, meta=None):
         self.path = path
+        self.meta = dict(meta or {})         # есть ли гитара, настроение и прочее о человечке
         self.entries = list(entries or [])
         self.next_id = next_id
         self.guesses, self.hits = guesses, hits
@@ -57,11 +58,12 @@ class Journal:
         nxt = nxt if is_int(nxt) and nxt > max([e["id"] for e in entries] or [0]) else \
             max([e["id"] for e in entries] or [0]) + 1
         g, h = raw.get("guesses", 0), raw.get("hits", 0)
-        return cls(path, entries, nxt, g if is_int(g) else 0, h if is_int(h) else 0)
+        meta = raw.get("meta") if isinstance(raw.get("meta"), dict) else {}
+        return cls(path, entries, nxt, g if is_int(g) else 0, h if is_int(h) else 0, meta)
 
     def save(self):
         return save_json(self.path, {"next_id": self.next_id, "guesses": self.guesses, "hits": self.hits,
-                                     "entries": self.entries})
+                                     "meta": self.meta, "entries": self.entries})
 
     def add(self, entry):
         e = dict(entry)

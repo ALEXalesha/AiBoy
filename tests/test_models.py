@@ -61,6 +61,11 @@ def random_states(n, rng):
     s[:, IDX["want_dir"]] = rng.uniform(-1, 1, n)
     s[:, IDX["fell"]] = (rng.random(n) < 0.15).astype(np.float32)
     s[:, IDX["facing"]] = rng.choice([-1.0, 1.0], n)
+    # флаги гитары в игре - да или нет, и играет он в пятой части жизни
+    playing = rng.random(n) < 0.2
+    s[:, IDX["playing"]] = playing
+    for k in ("learning_tune", "got_it", "failing"):
+        s[:, IDX[k]] = playing & (rng.random(n) < 0.4)
     return s
 
 

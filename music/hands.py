@@ -25,7 +25,7 @@ BODY_AT = (0.18, 0.14)          # центр корпуса гитары от т
 NUT_FROM_BODY = 0.40            # от центра корпуса до порожка
 STRING_GAP = 0.009              # м между струнами поперёк грифа
 FRET_HIT = 0.6                  # доля расстояния между ладами - попал в лад
-STRING_HIT = 0.5                # доля расстояния между струнами - попал в струну
+STRING_HIT = 1.0                # доля расстояния между струнами - попал в струну
 SITTING = (0.12, 0.05, 1.3, 0.6, 1.1, 1.3, 1.45, 1.45, 0.7, 0.7)   # суставы сидя с гитарой
 
 
@@ -134,4 +134,4 @@ def left_hit(point, s, fret, body):
 
 def right_hit(point, s, body):
     tx, ty = right_target(s, body)
-    return math.hypot(point[0] - tx, point[1] - ty) <= max(0.012, 0.8 * STRING_GAP) * _k(body)
+    return math.hypot(point[0] - tx, point[1] - ty) <= 0.015 * _k(body)

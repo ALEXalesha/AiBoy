@@ -21,10 +21,12 @@ from body.cppn import generate_body  # noqa: E402
 from body.physics import Human  # noqa: E402
 from brain.brain import GAMMA, HIDDEN, LR, SIGMA, Brain, run_steps  # noqa: E402
 from game import models  # noqa: E402
+from nn import io  # noqa: E402
 from world.generate import generate  # noqa: E402
 
 WIDTH = 160.0
 STEPS_PER_SECOND = 30
+SNAPSHOT_EVERY = 40
 
 
 def life_in(brain, m, world_seed, body_seed, seconds, learn, x=None):
@@ -57,6 +59,16 @@ def evaluate(brain, m, seconds=60, worlds=10):
     }
 
 
+def quick_check(brain, m):
+    """Сдвиг с места на 5 отдельных мирах по 30 с, без обучения; счётчик шагов не трогает."""
+    steps, h = brain.steps, brain.h.copy()
+    rows = [life_in(brain, m, 3_000 + i, 3_100 + i, 30, learn=False) for i in range(5)]
+    brain.steps = steps
+    brain.h[:] = h
+    brain.prev = None
+    return float(np.mean([r["displacement_m"] for r in rows]))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--minutes", type=float, default=10.0)
@@ -71,7 +83,15 @@ def main():
     t0 = time.time()
     history = []
     worlds = 0
+    best = None                     # (сдвиг на проверке, веса, шагов, мир)
+    snapshots = []
     while time.time() - t0 < args.minutes * 60:
+        if worlds % SNAPSHOT_EVERY == 0 and worlds:
+            score = quick_check(brain, m)
+            snapshots.append({"world": worlds, "steps": brain.steps, "displacement_m": round(score, 2)})
+            print(f"  снимок после {worlds} миров: сдвиг на проверке {score:.1f} м")
+            if best is None or score > best[0]:
+                best = (score, {k: v.copy() for k, v in io.collect(brain.nets()).items()}, brain.steps, worlds)
         row = life_in(brain, m, 90_000 + worlds, 91_000 + worlds, args.world_seconds, learn=True,
                       x=float(rng.uniform(0, WIDTH)))
         row["world"] = worlds + 1
@@ -84,20 +104,35 @@ def main():
                   f"{np.mean([r['displacement_m'] for r in recent]):.1f} м, награда "
                   f"{np.mean([r['reward'] for r in recent]):.3f}")
     seconds = time.time() - t0
+    total_steps, total_worlds = brain.steps, worlds
+    score = quick_check(brain, m)
+    snapshots.append({"world": worlds, "steps": brain.steps, "displacement_m": round(score, 2)})
+    if best is not None and best[0] > score:
+        io.restore(brain.nets(), best[1])
+        brain.steps = best[2]
+        chosen = best[3]
+    else:
+        chosen = worlds
+    brain.reset_memory()
     after = evaluate(brain, m)
-    print("после:", after)
+    print("после:", after, "- снимок после", chosen, "миров")
     brain.save(model_file(args.out + ".npz"))
     write_passport(args.out, {
         "what": "стартовые веса мозга: рекуррентный слой 46 -> 64, головы суставов, прыжка, "
                 "критика и разговора, предсказатель 58 -> 96 -> 46",
-        "how": "то же онлайн-обучение, что в игре (любопытство, актёр-критик), в череде миров",
+        "how": "то же онлайн-обучение, что в игре (любопытство, актёр-критик), в череде миров; "
+               f"каждые {SNAPSHOT_EVERY} миров снимок весов проверялся на 5 отдельных мирах по 30 с "
+               "(сдвиг с места без обучения), в models взят лучший снимок",
         "honest_training_time": {
             "wall_minutes": round(seconds / 60, 1),
             "brain_steps": int(brain.steps),
             "lived_hours": round(brain.steps / STEPS_PER_SECOND / 3600, 2),
-            "worlds": worlds,
+            "worlds": chosen,
             "world_seconds_each": args.world_seconds,
+            "whole_run_brain_steps": int(total_steps),
+            "whole_run_worlds": total_worlds,
         },
+        "snapshots": snapshots,
         "hyper": {"hidden": HIDDEN, "gamma": GAMMA, "sigma": SIGMA, "lr": LR},
         "check_10_new_worlds_60s": {"before": before, "after": after},
         "history": history[::max(1, len(history) // 60)],

@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 
 import paths
@@ -64,6 +65,7 @@ def test_chat_fills_with_his_phrases(win):
 
 
 def test_pause_stops_life_and_speed_multiplies_it(win):
+    win.show_page("observe")
     obs = win.observe
     obs.toggle_pause()
     t = obs.life.time
@@ -140,10 +142,8 @@ def test_settings_are_applied_and_saved(win):
     assert win.observe.view.show_thoughts is False
     win.change_setting("speed", 2)
     assert win.observe.speed == 2
-    win.change_setting("volume", 15)
-    assert win.player.volume == 15
     saved = json.loads(open(paths.user_file("settings.json"), encoding="utf-8").read())
-    assert saved["volume"] == 15 and saved["speed"] == 2
+    assert saved["speed"] == 2 and saved["show_thoughts"] is False
 
 
 def test_broken_files_do_not_stop_the_window(qapp, _own_data_dir):
@@ -187,14 +187,14 @@ def wrapped_labels(widget):
 def test_wrapping_labels_are_never_capped_in_height(win):
     win.change_setting("phrase_freq", "often")
     win.observe.advance(60 * 12)
-    for name, _ in app_module.PAGES:
+    for name in ["menu"] + [n for n, _ in app_module.PAGES]:
         win.show_page(name)
         QTest.qWait(10)
         capped = [lb.text() for lb in wrapped_labels(win) if lb.maximumHeight() < QWIDGETSIZE_MAX]
         assert capped == [], (name, capped)
 
 
-@pytest.mark.parametrize("page", [name for name, _ in app_module.PAGES])
+@pytest.mark.parametrize("page", ["menu"] + [name for name, _ in app_module.PAGES])
 @pytest.mark.parametrize("scale", [1.0, 1.1])
 def test_text_fits_at_minimum_window_size(qapp, page, scale):
     from PySide6.QtWidgets import QLabel
@@ -213,3 +213,100 @@ def test_text_fits_at_minimum_window_size(qapp, page, scale):
                if lb.heightForWidth(lb.width()) > lb.height()]
     w.close()
     assert clipped == []
+
+
+def card_gaps(card):
+    """Вертикальные зазоры между соседними блоками карточки и внутренние поля, px."""
+    lay = card.layout()
+    rects = [lay.itemAt(i).geometry() for i in range(lay.count())]
+    gaps = [b.top() - a.bottom() - 1 for a, b in zip(rects, rects[1:])]
+    pads = [rects[0].top(), card.height() - 1 - rects[-1].bottom(),
+            min(r.left() for r in rects), card.width() - 1 - max(r.right() for r in rects)]
+    return gaps, pads
+
+
+@pytest.mark.parametrize("minimal", [False, True])
+def test_gallery_cards_have_room_to_breathe(qapp, minimal):
+    """Жалоба «слишком близко элементы»: между картинкой, названием, строкой итогов и
+    кнопками - не меньше 8 px, от краёв карточки - не меньше 12 px, и в самом маленьком окне."""
+    w = app_module.MainWindow(autostart=False)
+    w.show()
+    try:
+        for seed in (1, 2, 3):
+            w.observe.new_world(seed=seed)
+        if minimal:
+            w.resize(w.minimumSize())
+        w.show_page("gallery")
+        QTest.qWait(30)
+        assert len(w.gallery_page.cards) == 4
+        for card in w.gallery_page.cards.values():
+            gaps, pads = card_gaps(card)
+            assert min(gaps) >= 8, gaps
+            assert min(pads) >= 12, pads
+    finally:
+        w.close()
+
+
+def steps_for(obs, speed, frames=60):
+    obs.set_speed(speed)
+    start = obs.life.brain.steps
+    for _ in range(frames):
+        obs.on_frame(1 / 60)
+    return obs.life.brain.steps - start
+
+
+def test_speed_x8_lives_eight_times_faster_in_batches_without_lag(win):
+    import time
+    win.show_page("observe")
+    obs = win.observe
+    assert 8 in obs.speed_buttons
+    one = steps_for(obs, 1)
+    obs.set_speed(8)
+    started = time.perf_counter()
+    eight = steps_for(obs, 8)
+    per_frame = (time.perf_counter() - started) / 60
+    assert 7.5 * one <= eight <= 8.5 * one
+    assert per_frame < 0.03                       # кадр считается быстрее, чем нужен экрану
+
+
+def test_slow_frames_do_not_lose_time_at_x8(win):
+    """Кадр пришёл через 50 мс (окно занято) - шаги не теряются, а досчитываются пачкой."""
+    win.show_page("observe")
+    obs = win.observe
+    obs.set_speed(8)
+    start = obs.life.time
+    for _ in range(20):
+        obs.on_frame(0.05)
+    for _ in range(10):
+        obs.on_frame(0.0)
+    assert obs.life.time - start == pytest.approx(20 * 0.05 * 8, abs=0.1)
+
+
+def test_chosen_speed_is_remembered(qapp):
+    w = app_module.MainWindow(autostart=False)
+    w.show_page("observe")
+    QTest.mouseClick(w.observe.speed_buttons[8], Qt.MouseButton.LeftButton)
+    assert w.settings.speed == 8
+    w.close()
+    again = app_module.MainWindow(autostart=False)
+    try:
+        assert again.observe.speed == 8 and again.observe.speed_buttons[8].isChecked()
+    finally:
+        again.close()
+
+
+def test_gallery_pictures_are_never_squeezed(qapp):
+    w = app_module.MainWindow(autostart=False)
+    w.show()
+    try:
+        for seed in range(1, 9):
+            w.observe.new_world(seed=seed)
+        w.resize(w.minimumSize())
+        w.show_page("gallery")
+        QTest.qWait(30)
+        from PySide6.QtWidgets import QLabel
+        for card in w.gallery_page.cards.values():
+            pic = next(lb for lb in card.findChildren(QLabel) if lb.pixmap() and not lb.pixmap().isNull())
+            assert (pic.width(), pic.height()) == app_module.GalleryPage.THUMB
+    finally:
+        w.close()

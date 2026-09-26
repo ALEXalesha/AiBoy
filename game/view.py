@@ -13,6 +13,7 @@ from PySide6.QtGui import (QColor, QFont, QImage, QLinearGradient, QPainter, QPa
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from body.physics import Human
+from game.perception import perceive
 
 VIEW_M = 7.5            # м по высоте в кадре
 HORIZON = 0.66          # где по высоте камера держит человечка
@@ -485,11 +486,14 @@ def draw_bubble(p, f, head, text, alpha, colors):
     p.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
 
 
-def thoughts_of(decision, curiosity):
-    """Подписи желаний мозга: [(текст, сила 0..1)]."""
+def thoughts_of(decision, curiosity, intent=None):
+    """Подписи желаний мозга: [(текст, сила 0..1)]. Направление - намерение за последнюю
+    секунду (как стрелка «что видит»), а не одно решение: иначе подпись мигала бы
+    «← иду» / «иду →» от каждого колебания."""
     if decision is None:
         return []
-    out = [("иду →" if decision.turn >= 0 else "← иду", min(1.0, abs(decision.turn))),
+    way = decision.turn if intent is None else intent
+    out = [("иду →" if way >= 0 else "← иду", min(1.0, abs(way))),
            ("прыгнуть?", min(1.0, decision.want_jump * 4)),
            ("интересно", min(1.0, curiosity)),
            ("сказать", min(1.0, decision.say * 6))]
@@ -556,6 +560,68 @@ def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thou
     return f
 
 
+def draw_perception(p, f, per, human, colors):
+    """«Что видит»: лучи к точкам рельефа из наблюдения мозга, яркость - ошибка его
+    предсказателя там (где ему интересно), кольца вокруг увиденных сущностей, стрелка
+    намерения за последнюю секунду. Возвращает прямоугольник панели со сводкой."""
+    eye = f.P((human.points()["head"][0], human.points()["head"][1] + human.body.head_r * 0.2))
+    warm = QColor(colors["warm"])
+    cold = QColor(255, 255, 255)
+    p.save()
+    for x, y, heat in per.rays:
+        c = QColor(cold)
+        c.setAlphaF(0.12 + 0.2 * heat)
+        p.setPen(QPen(c, 1.2, Qt.PenStyle.DashLine))
+        hit = QPointF(f.X(x), f.Y(y))
+        p.drawLine(eye, hit)
+        dot = QColor(warm) if heat > 0.05 else QColor(cold)
+        dot.setAlphaF(0.55 + 0.45 * heat)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(dot)
+        r = 3.0 + 7.0 * heat
+        p.drawEllipse(hit, r, r)
+    for x, y, _, heat in per.entities:
+        c = QColor(warm)
+        c.setAlphaF(0.5 + 0.5 * heat)
+        p.setPen(QPen(c, 2.0 + 2.0 * heat))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        rr = (0.55 + 0.25 * heat) * f.ppm
+        p.drawEllipse(QPointF(f.X(x), f.Y(y) - rr * 0.6), rr, rr)
+    # стрелка намерения: от таза в сторону желания, длина - сила желания
+    if abs(per.intent) > 0.05:
+        base = f.P((human.px, human.py - human.body.leg() * 0.15))
+        tip = QPointF(base.x() + per.intent * f.ppm * 1.6, base.y())
+        pen = QPen(QColor(colors["accent"]), 4)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.drawLine(base, tip)
+        s = 1 if per.intent > 0 else -1
+        p.setBrush(QColor(colors["accent"]))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawPolygon(QPolygonF([QPointF(tip.x() + s * 10, tip.y()), QPointF(tip.x() - s * 3, tip.y() - 8),
+                                 QPointF(tip.x() - s * 3, tip.y() + 8)]))
+    # сводка словами - в левом нижнем углу кадра
+    font = QFont(p.font())
+    font.setPixelSize(max(11, min(14, int(f.h * 0.024))))
+    p.setFont(font)
+    fm = p.fontMetrics()
+    pad = 10
+    width = min(f.w - 2 * pad, max(fm.horizontalAdvance(t) for t in per.lines) + 2 * pad)
+    lines = [fm.elidedText(t, Qt.TextElideMode.ElideRight, int(width - 2 * pad)) for t in per.lines]
+    height = len(lines) * fm.height() + 2 * pad - 2
+    box = QRectF(f.rect.left() + pad, f.rect.bottom() - height - pad, width, height)
+    bg = QColor(colors["surface"])
+    bg.setAlphaF(0.82)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(bg)
+    p.drawRoundedRect(box, 10, 10)
+    p.setPen(QColor(colors["text"]))
+    for i, t in enumerate(lines):
+        p.drawText(QPointF(box.left() + pad, box.top() + pad + fm.ascent() + i * fm.height() - 1), t)
+    p.restore()
+    return box
+
+
 def thumbnail(world, body, width, height, colors, t=0.0):
     """Картинка мира с человечком для галереи."""
     human = Human(body, world, x=world.width * 0.5)
@@ -578,6 +644,9 @@ class WorldView(QWidget):
         self.life = None
         self.cam_x = self.cam_y = 0.0
         self.show_thoughts = False
+        self.show_vision = False
+        self.vision_rect = None        # где нарисована сводка «что видит» (для проверок)
+        self.perception = None
         self.paused = False
         self.clock = 0.0
         self.setMinimumSize(420, 300)
@@ -607,9 +676,16 @@ class WorldView(QWidget):
             p.end()
             return
         life = self.life
-        thoughts = thoughts_of(life.decision, life.brain.curiosity) if self.show_thoughts else None
-        draw_scene(p, rect, life.world, life.human, self.cam_x, self.cam_y, self.clock, self.colors,
-                   speech=(life.last_phrase, life.speaking), thoughts=thoughts)
+        thoughts = thoughts_of(life.decision, life.brain.curiosity, life.intent) if self.show_thoughts else None
+        f = draw_scene(p, rect, life.world, life.human, self.cam_x, self.cam_y, self.clock, self.colors,
+                       speech=(life.last_phrase, life.speaking), thoughts=thoughts)
+        self.vision_rect = None
+        if self.show_vision:
+            # раз в кадр, а не на каждый шаг жизни: на x8 это та же цена
+            self.perception = perceive(life)
+            if self.perception is not None:
+                p.setRenderHint(QPainter.RenderHint.Antialiasing)
+                self.vision_rect = draw_perception(p, f, self.perception, life.human, self.colors)
         if self.paused:
             p.fillRect(rect, QColor(0, 0, 0, 70))
             font = QFont(self.font())

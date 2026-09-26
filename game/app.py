@@ -1,17 +1,16 @@
 """Окно AiBoy: наблюдение, галерея, статистика, настройки. Интерфейс на русском.
 
 Человек здесь только смотрит: мир, человечка и его фразы придумывают сети, окно их
-рисует, играет звуки, сохраняет галерею, статистику и веса мозга.
+рисует, сохраняет галерею, статистику и веса мозга.
 """
-import os
 import time
 
 import numpy as np
-from PySide6.QtCore import QElapsedTimer, Qt, QTimer
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import QElapsedTimer, QRectF, Qt, QTimer
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QFrame, QGridLayout,
                                QHBoxLayout, QHeaderView, QLabel, QMainWindow, QMessageBox, QPushButton,
-                               QScrollArea, QSlider, QStackedWidget, QTableWidget, QTableWidgetItem,
+                               QScrollArea, QStackedWidget, QTableWidget, QTableWidgetItem,
                                QVBoxLayout, QWidget)
 
 import paths
@@ -23,19 +22,27 @@ from game.gallery import Gallery, make_entry
 from game.icon import app_icon
 from game.life import Life
 from game.settings import FREQ_NAMES, SIZE_NAMES, SPEEDS, WORLD_WIDTH, Settings
-from game.sound import Player
 from game.stats import Stats
 from game.version import VERSION
-from game.view import WorldView, thumbnail
+from game.view import WorldView, draw_scene, thumbnail
 from game.window_state import WindowMemory
+from body.cppn import generate_body
+from world.generate import world_name
 from world.interest import score as interest_score
 
 TITLE = "AiBoy"
 WINDOW_OPTS = {"width": 1240, "height": 780, "minWidth": 900, "minHeight": 600}
 FRAME_MS = 16
-MAX_TICKS_PER_FRAME = 12
+FRAME_BUDGET = 0.012           # с на счёт жизни за кадр: остальное - рисованию
+MAX_BACKLOG = 0.5              # с жизни, которые ещё можно досчитать пачками
 SAVE_BRAIN_EVERY = 60.0         # с реального времени
 CURVE_EVERY = 10.0              # с прожитого - точка кривой обучения
+ABOUT = ("Этот мир и человечка в нём придумали нейросети.\n"
+         "Своим телом он управляет сам - никто не даёт ему команд.\n"
+         "Он учится из любопытства: ищет то, чего ещё не знает.\n"
+         "Его мысли появляются в чате сверху,\n"
+         "а миры и человечки сохраняются в галерее.")
+RECENT_NAMES = 12             # столько последних миров не повторяют имя нового
 PAGES = (("observe", "Наблюдение"), ("gallery", "Галерея"), ("stats", "Статистика"), ("settings", "Настройки"))
 
 
@@ -109,6 +116,79 @@ class Page(QWidget):
         pass
 
 
+# --- меню ---
+
+
+class MenuPage(Page):
+    """Стартовый экран. За ним - текущий мир с человечком (кадр стоит: жизнь на паузе),
+    к низу он растворяется в цвете темы."""
+
+    def __init__(self, window):
+        super().__init__(window)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 12, 24, 12)
+        outer.addStretch(3)
+        # колонка фиксированной ширины: переносимая строка внутри получает высоту по ширине
+        # (с флагом выравнивания в раскладке Qt считал бы её в одну строку)
+        box = QWidget()
+        box.setFixedWidth(560)
+        col = QVBoxLayout(box)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(theme.GAP_SMALL)
+        self.title = label("AiBoy", "menuTitle")
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        col.addWidget(self.title)
+        self.about = label(ABOUT, "menuSub", wrap=True)
+        self.about.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        col.addWidget(self.about)
+        col.addSpacing(theme.GAP_BIG)
+        self.play_button = button("Играть", "menuPrimary", window.play)
+        self.new_button = button("Новый мир", "menu", window.play_new)
+        self.gallery_button = button("Галерея", "menu", lambda: window.show_page("gallery"))
+        self.stats_button = button("Статистика", "menu", lambda: window.show_page("stats"))
+        self.settings_button = button("Настройки", "menu", lambda: window.show_page("settings"))
+        self.quit_button = button("Выход", "menu", window.close)
+        for b in (self.play_button, self.new_button, self.gallery_button, self.stats_button,
+                  self.settings_button, self.quit_button):
+            col.addWidget(b, 0, Qt.AlignmentFlag.AlignHCenter)
+        outer.addWidget(box, 0, Qt.AlignmentFlag.AlignHCenter)
+        outer.addStretch(4)
+        self.foot = label("", "menuFoot", wrap=True)
+        self.foot.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer.addWidget(self.foot)
+
+    def on_show(self):
+        w = self.window_
+        life = w.observe.life
+        saved = life is not None and (w.had_saved or life.time > 0)
+        self.play_button.setText("Продолжить" if saved else "Играть")
+        self.new_button.setVisible(saved)
+        if life is not None:
+            self.foot.setText(f"мир «{life.world.name}» · человечек {life.body.name} · прожито в этом мире "
+                              f"{clock(life.time)} · версия {VERSION}")
+        self.setFocus()
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        rect = QRectF(0, 0, self.width(), self.height())
+        colors = self.window_.colors()
+        life = self.window_.observe.life
+        if life is not None:
+            h = life.human
+            view = self.window_.observe.view
+            draw_scene(p, rect, life.world, h, view.cam_x, view.cam_y, view.clock, colors)
+        bg = QColor(colors["bg"])
+        g = QLinearGradient(0, 0, 0, rect.height())
+        for pos, a in ((0.0, 0.45), (0.45, 0.62), (0.8, 0.94), (0.93, 1.0), (1.0, 1.0)):
+            c = QColor(bg)
+            c.setAlphaF(a)
+            g.setColorAt(pos, c)
+        p.fillRect(rect, g)
+        p.end()
+
+
 # --- наблюдение ---
 
 
@@ -129,9 +209,9 @@ class ObservePage(Page):
 
         root = QHBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 16)
-        root.setSpacing(14)
+        root.setSpacing(theme.GAP_BIG)
         left = QVBoxLayout()
-        left.setSpacing(10)
+        left.setSpacing(theme.GAP)
         chat_card = card()
         chat_card.setFixedHeight(150)
         cl = QVBoxLayout(chat_card)
@@ -141,14 +221,14 @@ class ObservePage(Page):
         left.addWidget(chat_card)
         self.view = WorldView(window.colors())
         self.view.show_thoughts = s.show_thoughts
+        self.view.show_vision = s.show_vision
         left.addWidget(self.view, 1)
         root.addLayout(left, 1)
 
         side = card()
-        side.setFixedWidth(280)
         col = QVBoxLayout(side)
-        col.setContentsMargins(16, 14, 16, 14)
-        col.setSpacing(6)
+        col.setContentsMargins(theme.PAD, theme.PAD, theme.PAD, theme.PAD)
+        col.setSpacing(theme.GAP_SMALL)
         col.addWidget(label("Мир", "muted"))
         self.world_name = label("", "worldName")
         col.addWidget(self.world_name)
@@ -160,7 +240,7 @@ class ObservePage(Page):
         grid.setVerticalSpacing(4)
         self.values = {}
         for r, (key, text) in enumerate((("time", "Живёт"), ("distance", "Пройдено"), ("phrases", "Фраз"),
-                                         ("sounds", "Звуков"), ("jumps", "Прыжков"), ("falls", "Падений"))):
+                                         ("jumps", "Прыжков"), ("falls", "Падений"))):
             grid.addWidget(label(text, "muted"), r, 0)
             self.values[key] = label("0", "value")
             grid.addWidget(self.values[key], r, 1, Qt.AlignmentFlag.AlignRight)
@@ -173,8 +253,14 @@ class ObservePage(Page):
         col.addSpacing(8)
         self.pause_button = button("Пауза", None, self.toggle_pause)
         col.addWidget(self.pause_button)
+        self.vision_button = button("Что видит (V)", "toggle",
+                                    lambda: window.change_setting("show_vision", self.vision_button.isChecked()))
+        self.vision_button.setCheckable(True)
+        self.vision_button.setChecked(s.show_vision)
+        col.addWidget(self.vision_button)
         col.addWidget(label("Скорость", "muted"))
-        box, self.speed_buttons = segmented({k: f"x{k}" for k in SPEEDS}, self.set_speed)
+        box, self.speed_buttons = segmented({k: f"x{k}" for k in SPEEDS},
+                                            lambda k: window.change_setting("speed", k))
         col.addWidget(box)
         col.addSpacing(6)
         col.addWidget(button("Новый мир", "primary", lambda: self.new_world()))
@@ -182,7 +268,12 @@ class ObservePage(Page):
         col.addStretch(1)
         self.learn_note = label("", "hint", wrap=True)
         col.addWidget(self.learn_note)
-        root.addWidget(side)
+        side_scroll = QScrollArea()
+        side_scroll.setWidgetResizable(True)
+        side_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        side_scroll.setFixedWidth(292)
+        side_scroll.setWidget(side)
+        root.addWidget(side_scroll)
         self.speed_buttons[self.speed].setChecked(True)
 
         self.timer = QTimer(self)
@@ -213,14 +304,33 @@ class ObservePage(Page):
         self.entry_base = (e.get("lived", 0.0), e.get("distance", 0.0), int(e.get("phrases", 0))) if e else (0, 0, 0)
         self.refresh_panel()
 
+    def fresh_seed(self, name_of, key):
+        """Зерно, чьё имя (его выдаёт сеть) не встречалось в последних RECENT_NAMES мирах
+        галереи: имена из двух-трёх слогов у сети иногда повторяются, а третья «Эльма»
+        подряд - скучно. Двадцать попыток, потом - какое вышло."""
+        recent = {e[key] for e in self.window_.gallery.entries[:RECENT_NAMES]}
+        seed = int(self.rng.integers(1, 2 ** 31 - 1))
+        for _ in range(20):
+            if name_of(seed) not in recent:
+                break
+            seed = int(self.rng.integers(1, 2 ** 31 - 1))
+        return seed
+
     def new_world(self, seed=None):
-        body = self.life.body_seed if self.life else int(self.rng.integers(1, 2 ** 31 - 1))
-        self.start(int(seed if seed is not None else self.rng.integers(1, 2 ** 31 - 1)), body)
+        m = self.window_.models
+        body = self.life.body_seed if self.life else self.fresh_seed(
+            lambda s: generate_body(m.body_genome, s).name, "human")
+        if seed is None:
+            seed = self.fresh_seed(lambda s: world_name(m.world_genome, s), "world")
+        self.start(int(seed), body)
 
     def new_human(self, seed=None):
+        m = self.window_.models
         world = self.life.world_seed if self.life else int(self.rng.integers(1, 2 ** 31 - 1))
         width = self.life.world.width if self.life else None
-        self.start(world, int(seed if seed is not None else self.rng.integers(1, 2 ** 31 - 1)), width)
+        if seed is None:
+            seed = self.fresh_seed(lambda s: generate_body(m.body_genome, s).name, "human")
+        self.start(world, int(seed), width)
 
     def flush_life(self):
         """Итоги текущей жизни - в статистику и галерею."""
@@ -264,16 +374,18 @@ class ObservePage(Page):
         """Кадр таймера: прожить столько шагов физики, сколько прошло времени * скорость."""
         if dt is None:
             dt = min(0.1, self.clock.restart() / 1000.0) if self.clock.isValid() else FRAME_MS / 1000
+        if self.window_.current_page() == "menu":
+            return                      # пока открыто меню, жизнь стоит
         self.view.advance(dt if not self.paused else 0.0)
         if not self.paused:
-            self.acc += dt * self.speed
-            n = 0
-            while self.acc >= DT and n < MAX_TICKS_PER_FRAME:
+            # жизнь считается пачками по DT; на кадр - не дольше FRAME_BUDGET, чтобы окно
+            # успевало рисовать и на x8. Не успели - остаток досчитается в следующих кадрах
+            # (но не больше MAX_BACKLOG: после долгой заминки время не нагоняется рывком).
+            self.acc = min(self.acc + dt * self.speed, MAX_BACKLOG * self.speed)
+            started = time.perf_counter()
+            while self.acc >= DT and time.perf_counter() - started < FRAME_BUDGET:
                 self.acc -= DT
-                n += 1
                 self.tick()
-            if n == MAX_TICKS_PER_FRAME:
-                self.acc = 0.0
         self.panel_clock += dt
         if self.panel_clock >= 0.5:
             self.panel_clock = 0.0
@@ -299,9 +411,6 @@ class ObservePage(Page):
             if kind == "phrase":
                 self.chat.add(life.time, data[0])
                 w.stats.add_phrase(data[0])
-            elif kind == "sound":
-                w.player.play(data[0])
-                w.stats.add_sound()
             elif kind in ("jump", "fall"):
                 w.stats.add_event(kind)
         self.curve_clock += DT
@@ -324,7 +433,6 @@ class ObservePage(Page):
         v["time"].setText(clock(life.time))
         v["distance"].setText(meters(life.distance))
         v["phrases"].setText(str(len(life.phrases)))
-        v["sounds"].setText(str(life.sounds))
         v["jumps"].setText(str(life.jumps))
         v["falls"].setText(str(life.falls))
         self.spark.set_values(life.curiosity_log[-120:])
@@ -360,7 +468,7 @@ class GalleryPage(Page):
         self.grid_host = QWidget()
         self.grid_host.setObjectName("galleryGrid")
         self.grid = QGridLayout(self.grid_host)
-        self.grid.setSpacing(14)
+        self.grid.setSpacing(theme.GAP_BIG)
         self.grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.scroll.setWidget(self.grid_host)
         outer.addWidget(self.scroll, 1)
@@ -399,16 +507,17 @@ class GalleryPage(Page):
         entries = self.window_.gallery.entries
         n = len(entries)
         self.count_label.setText(f"{n} {plural(n, 'мир', 'мира', 'миров')}")
-        cols = max(1, (self.width() - 60) // (self.THUMB[0] + 30))
+        cols = max(1, (self.width() - 60) // (self.THUMB[0] + 2 * theme.PAD + theme.GAP_BIG + 4))
         current = self.window_.observe.entry_id
         for i, e in enumerate(entries):
             c = QFrame()
             c.setObjectName("thumb")
             lay = QVBoxLayout(c)
-            lay.setContentsMargins(10, 10, 10, 10)
-            lay.setSpacing(4)
+            lay.setContentsMargins(theme.PAD, theme.PAD, theme.PAD, theme.PAD)
+            lay.setSpacing(theme.GAP)
             pic = QLabel()
             pic.setPixmap(self.pixmap(e))
+            pic.setFixedSize(*self.THUMB)      # картинка, не текст: сжимать её нельзя
             lay.addWidget(pic)
             title = f"{e['world']} · {e['human']}" + ("  (сейчас)" if e["id"] == current else "")
             lay.addWidget(label(title, "section"))
@@ -416,6 +525,7 @@ class GalleryPage(Page):
             lay.addWidget(label(f"прожил {clock(e.get('lived', 0))} · {n_ph} {plural(n_ph, 'фраза', 'фразы', 'фраз')}"
                                 f" · интересность {e.get('interest', 0):.2f}", "hint"))
             row = QHBoxLayout()
+            row.setSpacing(theme.GAP)
             row.addWidget(button("Открыть", "primary", lambda _=False, i_=e["id"]: self.open_entry(i_)))
             row.addWidget(button("Удалить", "danger", lambda _=False, i_=e["id"]: self.delete_entry(i_)))
             lay.addLayout(row)
@@ -490,16 +600,16 @@ class StatsPage(Page):
         lay.addWidget(scroll)
         col = QVBoxLayout(inner)
         col.setContentsMargins(24, 16, 24, 16)
-        col.setSpacing(14)
+        col.setSpacing(theme.GAP_BIG)
         col.addWidget(label("Статистика", "heading"))
         row = QHBoxLayout()
-        row.setSpacing(12)
+        row.setSpacing(theme.GAP)
         self.big = {}
         for key, text in (("worlds", "миров"), ("lived", "прожито"), ("distance", "пройдено"),
-                          ("phrases", "фраз"), ("sounds", "звуков"), ("jumps", "прыжков"), ("falls", "падений")):
+                          ("phrases", "фраз"), ("jumps", "прыжков"), ("falls", "падений")):
             c = card()
             cl = QVBoxLayout(c)
-            cl.setContentsMargins(14, 10, 14, 10)
+            cl.setContentsMargins(theme.PAD, 12, theme.PAD, 12)
             self.big[key] = label("0", "bigNumber")
             cl.addWidget(self.big[key])
             cl.addWidget(label(text, "muted"))
@@ -519,7 +629,7 @@ class StatsPage(Page):
         col.addWidget(learn)
 
         two = QHBoxLayout()
-        two.setSpacing(14)
+        two.setSpacing(theme.GAP_BIG)
         words = card()
         wl = QVBoxLayout(words)
         wl.setContentsMargins(18, 14, 18, 14)
@@ -551,7 +661,7 @@ class StatsPage(Page):
         self.big["worlds"].setText(str(s.worlds))
         self.big["lived"].setText(clock(s.lived))
         self.big["distance"].setText(meters(s.distance))
-        for k in ("phrases", "sounds", "jumps", "falls"):
+        for k in ("phrases", "jumps", "falls"):
             self.big[k].setText(str(getattr(s, k)))
         self.chart.set_data(s.curve)
         b = w.brain
@@ -594,7 +704,7 @@ class SettingsPage(Page):
         lay.addWidget(scroll)
         outer = QVBoxLayout(inner)
         outer.setContentsMargins(24, 16, 24, 16)
-        outer.setSpacing(14)
+        outer.setSpacing(theme.GAP_BIG)
         outer.addWidget(label("Настройки", "heading"))
         box = card()
         box.setMaximumWidth(760)
@@ -616,26 +726,23 @@ class SettingsPage(Page):
                 line.addWidget(extra)
             grid.addLayout(line, r, 1)
 
-        self.volume = QSlider(Qt.Orientation.Horizontal)
-        self.volume.setRange(0, 100)
-        self.volume.setValue(s.volume)
-        self.volume_label = label(f"{s.volume}%")
-        self.volume_label.setMinimumWidth(48)
-        self.volume.valueChanged.connect(self.on_volume)
-        row(0, "Громкость", "Его голос: короткие мягкие звуки", self.volume, self.volume_label)
-
         self.freq = self.combo(FREQ_NAMES, s.phrase_freq, "phrase_freq")
-        row(1, "Частота фраз", "Как часто он может говорить и издавать звуки", self.freq)
+        row(0, "Частота фраз", "Как часто он может говорить в чат", self.freq)
         self.speed = self.combo({k: f"x{k}" for k in SPEEDS}, s.speed, "speed")
-        row(2, "Скорость по умолчанию", "С какой скоростью идёт жизнь при запуске", self.speed)
+        row(1, "Скорость по умолчанию", "С какой скоростью идёт жизнь при запуске", self.speed)
         self.thoughts = QCheckBox("Показывать")
         self.thoughts.setChecked(s.show_thoughts)
         self.thoughts.toggled.connect(lambda on: window.change_setting("show_thoughts", on))
-        row(3, "Мысли", "Подписи желаний мозга над головой: куда идти, прыгнуть ли, сказать ли", self.thoughts)
+        self.vision = QCheckBox("Показывать")
+        self.vision.setChecked(s.show_vision)
+        self.vision.toggled.connect(lambda on: window.change_setting("show_vision", on))
+        row(5, "Что видит", "Поверх мира: что он видит, где ему интересно, куда хочет идти (клавиша V)",
+            self.vision)
+        row(2, "Мысли", "Подписи желаний мозга над головой: куда идти, прыгнуть ли, сказать ли", self.thoughts)
         self.theme = self.combo(theme.THEME_NAMES, s.theme, "theme")
-        row(4, "Тема", "Тёмная или светлая рамка вокруг мира", self.theme)
+        row(3, "Тема", "Тёмная или светлая рамка вокруг мира", self.theme)
         self.size = self.combo(SIZE_NAMES, s.world_size, "world_size")
-        row(5, "Размер мира", "Ширина новых миров; мир - кольцо, края нет", self.size)
+        row(4, "Размер мира", "Ширина новых миров; мир - кольцо, края нет", self.size)
         outer.addWidget(box)
         outer.addWidget(label("Всё сохраняется сразу.", "hint"))
         outer.addStretch(1)
@@ -650,9 +757,6 @@ class SettingsPage(Page):
         c.currentIndexChanged.connect(lambda i: self.window_.change_setting(setting, c.itemData(i)))
         return c
 
-    def on_volume(self, v):
-        self.volume_label.setText(f"{v}%")
-        self.window_.change_setting("volume", v)
 
 
 # --- окно ---
@@ -672,7 +776,6 @@ class MainWindow(QMainWindow):
         self.gallery = Gallery.load(self.gallery_path)
         self.models = models.load()
         self.brain, self.brain_from_user = models.user_brain(self.brain_path)
-        self.player = Player(os.path.join(paths.data_dir(), "sounds"), self.settings.volume)
         self.last_brain_save = time.monotonic()
 
         root = QWidget()
@@ -680,24 +783,31 @@ class MainWindow(QMainWindow):
         lay = QVBoxLayout(root)
         lay.setContentsMargins(0, 8, 0, 0)
         lay.setSpacing(0)
-        nav = QHBoxLayout()
+        self.nav = QWidget()
+        nav = QHBoxLayout(self.nav)
         nav.setContentsMargins(16, 0, 16, 0)
+        self.menu_button = button("В меню", "tab", lambda: self.show_page("menu"))
+        nav.addWidget(self.menu_button)
+        nav.addSpacing(6)
         brand = label("AiBoy", "worldName")
         nav.addWidget(brand)
         nav.addSpacing(18)
         box, self.tabs = segmented(dict(PAGES), self.show_page, name="tab")
         nav.addWidget(box)
         nav.addStretch(1)
-        lay.addLayout(nav)
+        lay.addWidget(self.nav)
         self.stack = QStackedWidget()
         lay.addWidget(self.stack, 1)
         self.setCentralWidget(root)
+        self.autostart = autostart
+        self.had_saved = bool(self.gallery.entries)
         self.observe = ObservePage(self)
+        self.menu = MenuPage(self)
         self.gallery_page = GalleryPage(self)
         self.stats_page = StatsPage(self)
         self.settings_page = SettingsPage(self)
-        self.pages = {"observe": self.observe, "gallery": self.gallery_page, "stats": self.stats_page,
-                      "settings": self.settings_page}
+        self.pages = {"menu": self.menu, "observe": self.observe, "gallery": self.gallery_page,
+                      "stats": self.stats_page, "settings": self.settings_page}
         for page in self.pages.values():
             self.stack.addWidget(page)
         self.apply_theme(self.settings.theme)
@@ -709,9 +819,7 @@ class MainWindow(QMainWindow):
             self.observe.start(last["world_seed"], last["body_seed"], last["width"], entry_id=last["id"])
         else:
             self.observe.new_world()
-        self.show_page("observe")
-        if autostart:
-            self.observe.set_running(True)
+        self.show_page("menu")
 
     def colors(self):
         return theme.palette(self.settings.theme)
@@ -721,9 +829,34 @@ class MainWindow(QMainWindow):
         return next(name for name, page in self.pages.items() if page is current)
 
     def show_page(self, name):
+        """Меню - во весь экран, без вкладок, и жизнь на паузе; остальные экраны - со
+        вкладками, жизнь идёт (если окно запущено с таймером)."""
+        in_menu = name == "menu"
+        if in_menu:
+            self.observe.flush_life()
+        self.observe.set_running(self.autostart and not in_menu)
+        self.nav.setVisible(not in_menu)
         self.stack.setCurrentWidget(self.pages[name])
-        self.tabs[name].setChecked(True)
+        if not in_menu:
+            self.tabs[name].setChecked(True)
         self.pages[name].on_show()
+
+    def play(self):
+        """«Играть» / «Продолжить»: к жизни в текущем мире."""
+        self.show_page("observe")
+
+    def play_new(self):
+        self.observe.new_world()
+        self.show_page("observe")
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape and self.current_page() != "menu":
+            self.show_page("menu")
+            return
+        if event.key() == Qt.Key.Key_V and self.current_page() == "observe":
+            self.change_setting("show_vision", not self.settings.show_vision)
+            return
+        super().keyPressEvent(event)
 
     def change_setting(self, name, value):
         setattr(self.settings, name, value)
@@ -731,8 +864,11 @@ class MainWindow(QMainWindow):
         if name == "theme":
             self.apply_theme(value)
             self.gallery_page.cache.clear()
-        elif name == "volume":
-            self.player.set_volume(value)
+        elif name == "show_vision":
+            self.observe.view.show_vision = value
+            self.observe.vision_button.setChecked(value)
+            self.settings_page.vision.setChecked(value)
+            self.observe.view.update()
         elif name == "show_thoughts":
             self.observe.view.show_thoughts = value
             self.observe.view.update()

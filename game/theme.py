@@ -18,6 +18,13 @@ PALETTES = {
 
 THEME_NAMES = {"dark": "Тёмная", "light": "Светлая"}
 
+# Одна шкала отступов на все экраны (px): внутри карточек - PAD, между блоками - GAP,
+# между разделами - GAP_BIG. Меньше GAP_SMALL между соседними виджетами не бывает.
+GAP_SMALL = 8
+GAP = 10
+GAP_BIG = 16
+PAD = 16
+
 
 def palette(name):
     return PALETTES.get(name, PALETTES["dark"])
@@ -39,6 +46,23 @@ QWidget#chatInner {{ background: {p['surface']}; }}
 QScrollArea {{ border: none; }}
 QLabel, QCheckBox, QRadioButton {{ background: transparent; }}
 QLabel#heading {{ font-size: 24px; font-weight: 700; }}
+QLabel#menuTitle {{ font-size: 50px; font-weight: 800; color: {p['accent']}; }}
+QLabel#menuSub {{ font-size: 15px; color: {p['text']}; }}
+QLabel#menuFoot {{ font-size: 12px; color: {p['muted']}; }}
+QPushButton#menu {{
+    font-size: 16px;
+    padding: 8px 20px;
+    min-width: 280px;
+}}
+QPushButton#menuPrimary {{
+    font-size: 16px;
+    font-weight: 600;
+    padding: 8px 20px;
+    min-width: 280px;
+    background: {p['accent']};
+    color: {p['accent_text']};
+    border: 1px solid {p['accent']};
+}}
 QLabel#section {{ font-size: 16px; font-weight: 600; }}
 QLabel#worldName {{ font-size: 20px; font-weight: 700; }}
 QLabel#muted, QLabel#hint {{ color: {p['muted']}; }}
@@ -89,6 +113,12 @@ QPushButton#tab {{
 }}
 QPushButton#tab:hover {{ color: {p['text']}; }}
 QPushButton#tab:checked {{ background: {p['surface2']}; color: {p['text']}; }}
+QPushButton#toggle:checked {{
+    background: {p['surface2']};
+    border-color: {p['accent']};
+    color: {p['accent']};
+    font-weight: 600;
+}}
 QPushButton#seg {{
     border-radius: 8px;
     padding: 6px 8px;

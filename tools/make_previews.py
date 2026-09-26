@@ -5,7 +5,9 @@
 Окно создаётся offscreen (Qt рисует в память), кадр снимается widget.grab() - без экрана
 и без чужих окон поверх. Данные - во временной папке, мозг - стартовый из models/, так что
 на кадрах то, что увидит человек при первом запуске: меню, несколько миров, фразы в чате,
-«что видит», серия кадров наблюдения подряд.
+«что видит», серия кадров наблюдения подряд; гитара - он играет (гриф с пальцами и
+крупно человечек с гитарой), «Попытки» после 300 попыток, «Научить мелодии» с записанной
+мелодией, настройки с громкостью и режимом гитары.
 """
 import os
 import sys
@@ -86,6 +88,79 @@ def worlds_grid(window):
     strip(frames, 3, "worlds", caps)
 
 
+def train_guitar(window, life, attempts=300):
+    """Попытки подряд без мира: как если бы он играл около 45 минут. Несколько оценок - чтобы
+    на кадре были 👍/👎 и вкус."""
+    g = life.guitarist
+    for i in range(attempts):
+        a = g.attempt(life.body)
+        rating = None
+        if i % 37 == 5:
+            rating = 1 if i % 2 else -1
+        entry, _, _ = g.finish(a, life.body, rating=rating)
+        window.stats.add_attempt(entry)
+        window.stats.guitar_time += a.duration
+
+
+def guitar_shots(window):
+    obs = window.observe
+    life = obs.life
+    train_guitar(window, life)
+    life.has_guitar = True
+    life.mood.world, life.mood.music, life.mood.world_time = 0.0, 0.9, 60.0
+    window.change_setting("show_vision", False)
+    window.show_page("observe")
+    # садится и играет; кадр - сразу после удара по струне, чтобы горел палец на грифе
+    for _ in range(60 * 60):
+        obs.tick()
+        if life.playing and life.attempt is not None and life.play_t > 2.0:
+            obs.guitar_panel.neck.set_time(life.play_t)
+            if obs.guitar_panel.neck.current()[1]:
+                break
+    obs.refresh_panel()
+    shot(window, "guitar")
+    # крупно: тот же кадр мира вдвое ближе
+    img = QImage(2480, 1400, QImage.Format.Format_ARGB32)
+    p = QPainter(img)
+    h = life.human
+    f = draw_scene(p, QRectF(0, 0, 2480, 1400), life.world, h, h.px, h.py + 0.9, 3.0, window.colors(),
+                   guitar="play")
+    p.end()
+    cx, cy = f.X(h.px), f.Y(h.py + 0.5)
+    close = img.copy(int(cx - 450), int(cy - 300), 900, 560)
+    path = os.path.join(DOCS, "preview_guitar_close.png")
+    close.save(path)
+    print(path)
+    window.change_setting("show_vision", True)
+    window.show_page("attempts")
+    page = window.attempts_page
+    tune = next((e["tune"] for e in reversed(life.guitarist.journal.entries) if e.get("tune")), "")
+    idx = page.tune.findData(tune)
+    page.tune.setCurrentIndex(max(0, idx))
+    shot(window, "attempts")
+
+
+def teach_shot(window):
+    window.show_page("teach")
+    page = window.teach_page
+    now = [0.0]
+    page.clock = lambda: now[0]
+    beat = 60.0 / page.tempo.value() / 2
+    page.start_recording()
+    tune = [(64, 1), (67, 1), (67, 1), (69, 1), (67, 2), (64, 2), (62, 1), (64, 1), (65, 2), (64, 4)]
+    for pitch, d in tune:
+        page.on_press(pitch)
+        now[0] += d * beat * 0.9
+        page.on_release(pitch)
+        now[0] += d * beat * 0.1
+    page.stop_recording()
+    page.name.setText("Моя песенка")
+    page.piano.down = {67}
+    page.piano.update()
+    shot(window, "teach")
+    page.piano.down = set()
+
+
 def main():
     app = QApplication.instance() or QApplication([])
     window = MainWindow(autostart=False)
@@ -122,15 +197,19 @@ def main():
     strip(frames, 3, "walk", caps)
     window.change_setting("show_vision", True)
 
+    guitar_shots(window)
+    teach_shot(window)
+
     window.show_page("gallery")
     shot(window, "gallery")
     # статистика длиннее окна - кадр с высоким окном, чтобы влезла целиком
     window.resize(SIZE[0], 1060)
     window.show_page("stats")
     shot(window, "stats")
-    window.resize(*SIZE)
+    # настройки с гитарой (режим, громкость, как часто) - тоже в высоком окне
     window.show_page("settings")
     shot(window, "settings")
+    window.resize(*SIZE)
     window.close()
 
 

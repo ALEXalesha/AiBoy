@@ -61,6 +61,14 @@ def _smooth_ring(values, sigma):
     return out
 
 
+def _silhouette(values, sigma):
+    """Силуэт гор: сглаженный выход сети, приведённый к размаху около 1 - чтобы горы
+    были видны, даже если сеть выдала почти ровную линию (это защита, не форма)."""
+    s = _smooth_ring(values, sigma)
+    s = s - s.mean()
+    return s / (s.std() + 0.15) * 0.9
+
+
 def _local_maxima(values, threshold, positions, gap, width):
     """Индексы локальных максимумов выше порога; из близких остаётся более высокий."""
     left, right = np.roll(values, 1), np.roll(values, -1)
@@ -141,7 +149,8 @@ def generate(genome, seed, width):
     out = cppn.terrain(genome, xs, width, z)
 
     amp = 1.2 + 3.3 * sig(g[cppn.G_AMP])
-    h = np.tanh(out[:, cppn.T_HEIGHT]) * amp
+    # лёгкое сглаживание (полметра) - защита от зубцов, форму холмов задаёт сеть
+    h = _smooth_ring(np.tanh(out[:, cppn.T_HEIGHT]), 2.0) * amp
     heights = np.clip(h - h.mean(), -6.0, 6.0)
     tone = np.tanh(out[:, cppn.T_TONE])
     grass = sig(out[:, cppn.T_GRASS])
@@ -167,8 +176,8 @@ def generate(genome, seed, width):
 
     # дальние и средние горы: отсчёты через 1 м, сглаженные - это силуэты, а не рельеф
     ones = np.arange(0, n, 4)
-    far = 3.5 + 5.0 * np.tanh(_smooth_ring(out[ones, cppn.T_FAR], 10.0))
-    mid = 1.5 + 3.5 * np.tanh(_smooth_ring(out[ones, cppn.T_MID], 5.0))
+    far = 4.0 + 5.0 * np.tanh(_silhouette(out[ones, cppn.T_FAR], 6.0))
+    mid = 2.0 + 3.5 * np.tanh(_silhouette(out[ones, cppn.T_MID], 3.0))
 
     clouds_amount = float(sig(g[cppn.G_CLOUDS]))
     cidx = np.arange(0, n, 16)

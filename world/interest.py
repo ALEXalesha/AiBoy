@@ -4,8 +4,8 @@
 
 - relief - разнообразие высот: стандартное отклонение от 0.8 до 3 м - лучше всего;
 - passable - проходимость: доля шагов по 0.5 м с перепадом не больше 0.45 м (ступенька,
-  которую нога берёт без прыжка); ниже 80 % - ноль; и каждая стена (перепад больше
-  1 м на 0.5 м - не перепрыгнуть) отнимает треть на 100 м;
+  которую нога берёт без прыжка): от 50 % - ноль до 95 % - полный балл; и каждая стена
+  (перепад больше 1 м на 0.5 м - не перепрыгнуть) на 100 м отнимает шестую часть;
 - contrast - небо у горизонта и земля различаются по яркости;
 - entities - сущностей от 6 до 20 на 100 м;
 - kinds - хотя бы 4 разных вида;
@@ -56,8 +56,8 @@ def walls_per_100m(world):
 def score(world):
     h = world.heights
     parts = {"relief": trapezoid(float(h.std()), 0.15, 0.8, 3.0, 5.0)}
-    walk = float(np.clip((passable_fraction(world) - 0.8) / 0.18, 0, 1))
-    parts["passable"] = walk * float(np.clip(1.0 - walls_per_100m(world) / 3.0, 0, 1))
+    walk = float(np.clip((passable_fraction(world) - 0.5) / 0.45, 0, 1))
+    parts["passable"] = walk * float(np.clip(1.0 - walls_per_100m(world) / 6.0, 0, 1))
     p = world.palette
     parts["contrast"] = float(np.clip(abs(luma(p["sky_bottom"]) - luma(p["ground"])) / 0.3, 0, 1))
     per100 = len(world.entities) * 100.0 / world.width

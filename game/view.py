@@ -366,6 +366,8 @@ def draw_human(p, f, human, t, speaking=0.0, guitar=None):
     fk = 1 - shade
     if guitar == "back":
         guitar_on_back(p, f, human)
+    elif guitar == "play":
+        draw_stump(p, f, human, pts["pelvis"])
     arm(far, fk)
     leg(far, fk)
     # корпус: таз в штанах, туловище в рубашке
@@ -522,6 +524,22 @@ def guitar_in_hands(p, f, human):
     ax, ay = hands.axis()
     center = (human.px + human.facing * cx, human.py + cy)
     draw_guitar(p, f, center, (human.facing * ax, ay), k * 0.95)
+
+
+def draw_stump(p, f, human, pelvis):
+    """Пенёк, на котором он сидит с гитарой: от земли до таза."""
+    x, top = pelvis[0], pelvis[1] - human.body.leg_w * 0.8
+    ground = human.world.height_at(x) - 0.05
+    if top <= ground:
+        return
+    half = 0.16 * human.body.height() / 1.7
+    p.save()
+    p.setPen(QPen(qc((0.30, 0.20, 0.12)), max(1.0, 0.012 * f.ppm)))
+    p.setBrush(qc((0.50, 0.36, 0.22)))
+    p.drawRect(QRectF(QPointF(f.X(x - half), f.Y(top)), QPointF(f.X(x + half), f.Y(ground))))
+    p.setBrush(qc((0.80, 0.66, 0.46)))
+    p.drawEllipse(QPointF(f.X(x), f.Y(top)), half * f.ppm, 0.035 * f.ppm)
+    p.restore()
 
 
 def guitar_lying(p, f, world, x):

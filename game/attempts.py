@@ -42,7 +42,7 @@ class Progress(QWidget):
         self.points = []
         self.what = ""
         self.setMinimumHeight(180)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def set_data(self, points, what):
         self.points, self.what = list(points), what
@@ -150,10 +150,9 @@ class AttemptsPage(Page):
         self.tune.currentIndexChanged.connect(self.refresh_chart)
         rl.addWidget(self.tune)
         self.chart = Progress(window.colors())
-        rl.addWidget(self.chart)
+        rl.addWidget(self.chart, 1)
         self.chart_note = label("", "hint", wrap=True)
         rl.addWidget(self.chart_note)
-        rl.addStretch(1)
         body.addWidget(right, 2)
         outer.addLayout(body, 1)
         self.rows = []

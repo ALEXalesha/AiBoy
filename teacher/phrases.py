@@ -45,6 +45,12 @@ FAST = ("бегу!", "быстрее!")
 IDLE = ("хм...", "ла-ла-ла", "я тут", "хорошо!", "привет, мир!")
 DEEP = ("не упасть бы",)
 UP = ("надо забраться повыше",)
+# гитара
+LEARNING = ("учу мелодию", "так, ещё разок", "сейчас получится", "по нотам, по нотам", "как там дальше?")
+GOT_IT = ("получилось!", "ура, вышло!", "почти как надо", "вот это да!")
+FAILING = ("не выходит...", "трудная мелодия", "пальцы не слушаются", "ещё разок")
+FREE = ("сыграю что-нибудь своё", "просто играю", "ла-ла, на гитаре", "поиграю на гитаре")
+MUSIC = LEARNING + GOT_IT + FAILING + FREE
 
 
 def color_name(h, s, v):
@@ -82,6 +88,15 @@ def entity_phrases(kind, color, side, near):
 def topics(state):
     """[(вес, [фразы])] - что можно сказать в этом состоянии."""
     s = lambda name: float(state[IDX[name]])  # noqa: E731
+    if s("playing") > 0.5:
+        # играет на гитаре: говорит только о музыке
+        if s("got_it") > 0.5:
+            return [(5.0, list(GOT_IT)), (0.5, list(LEARNING))]
+        if s("failing") > 0.5:
+            return [(4.0, list(FAILING)), (1.0, list(LEARNING))]
+        if s("learning_tune") > 0.5:
+            return [(3.0, list(LEARNING)), (0.5, list(FREE))]
+        return [(3.0, list(FREE))]
     out = [(0.7, list(IDLE))]
     if s("fell") > 0.5:
         out.append((6.0, list(FALL)))
@@ -128,7 +143,7 @@ def words(text):
 
 def vocabulary():
     """Все слова, которые учитель может сказать."""
-    texts = list(FALL + FLY + JUMP + CURIOUS + BORED + NIGHT + FLAT + FAST + IDLE + DEEP + UP)
+    texts = list(FALL + FLY + JUMP + CURIOUS + BORED + NIGHT + FLAT + FAST + IDLE + DEEP + UP + MUSIC)
     for kind in KINDS:
         for color in COLORS:
             for side in (1, -1):

@@ -157,15 +157,22 @@ class Guitarist:
             reacher.prev = {k: None for k in reacher.prev}
         commands = []
         aims = []
-        for t, s, f, force, d in intended:
+        prev_strike = -1
+        for i, (t, s, f, force, d) in enumerate(intended):
             lt = hands.left_target(s, f, body)
             rt = hands.right_target(s, body)
             left = reacher.aim(body, lean, lt, "left")
             right = reacher.aim(body, lean, rt, "right")
-            start = int(max(0, t - LEAD) * step_sec * FPS)
+            # к ноте руки едут не раньше, чем отыграна прошлая (иначе прошлая мимо), и не
+            # раньше, чем за LEAD шагов
+            start = max(prev_strike + 1, int(max(0, t - LEAD) * step_sec * FPS))
             commands.append((start, (left[0], left[1], right[0], right[1])))
-            # после удара правая рука чуть отходит от струн
-            commands.append((int((t + 0.5) * step_sec * FPS), (left[0], left[1], right[0] - 0.15, right[1])))
+            strike = int(t * step_sec * FPS)
+            nxt = intended[i + 1][0] if i + 1 < len(intended) else None
+            if nxt is None or nxt - t > LEAD:
+                # после удара правая рука чуть отходит от струн, если следующая нота не скоро
+                commands.append((strike + int(0.5 * step_sec * FPS), (left[0], left[1], right[0] - 0.15, right[1])))
+            prev_strike = strike
             aims.append((t, s, f, lt, rt, left, right))
         arms = arm_track(body, commands, frames)
         sounded, motor, reached = [], [], []

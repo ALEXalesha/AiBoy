@@ -7,7 +7,7 @@
   которую нога берёт без прыжка): от 50 % - ноль до 95 % - полный балл; и каждая стена
   (перепад больше 1 м на 0.5 м - не перепрыгнуть) на 100 м отнимает шестую часть;
 - contrast - небо у горизонта и земля различаются по яркости;
-- entities - сущностей от 6 до 20 на 100 м;
+- entities - сущностей от 10 до 28 на 100 м;
 - kinds - хотя бы 4 разных вида;
 - pop - сущности видно на фоне земли.
 """
@@ -61,7 +61,7 @@ def score(world):
     p = world.palette
     parts["contrast"] = float(np.clip(abs(luma(p["sky_bottom"]) - luma(p["ground"])) / 0.3, 0, 1))
     per100 = len(world.entities) * 100.0 / world.width
-    parts["entities"] = trapezoid(per100, 2.0, 6.0, 20.0, 32.0)
+    parts["entities"] = trapezoid(per100, 4.0, 10.0, 28.0, 45.0)
     parts["kinds"] = min(1.0, len({e.kind for e in world.entities}) / 4.0)
     if world.entities:
         g = np.array(p["ground"])

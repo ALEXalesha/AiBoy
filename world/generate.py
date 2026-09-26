@@ -15,6 +15,7 @@ from world import cppn
 KINDS = ("tree", "bush", "stone", "flower", "mushroom", "crystal")
 DX = 0.25                     # шаг высот, м
 MIN_GAP = 2.0                 # сущности не ближе друг к другу, м
+COMPANION = 5                 # отсчётов (1.25 м) - соседка у густого места
 SYLLABLES = ("ла", "ми", "ро", "ка", "ну", "ти", "се", "во", "ра", "лу", "ни", "ко", "та",
              "зе", "ри", "мо", "са", "пе", "лё", "ю", "да", "фи", "ор", "эль")
 
@@ -164,15 +165,22 @@ def generate(genome, seed, width):
     threshold = 0.62 - 0.3 * sig(g[cppn.G_RICH])
     hue_shift = sig(g[cppn.G_HUE_SHIFT])
     entities = []
-    for k in _local_maxima(density, threshold, xs[idx], MIN_GAP, width):
-        i = idx[k]
-        x = float(xs[i])
-        kind = KINDS[int(np.argmax(out[i, cppn.T_KIND]))]
+
+    def entity_at(i, shrink=1.0):
         hue = float(sig(out[i, cppn.T_HUE]) + hue_shift)
         color = hsv(hue, 0.5 + 0.35 * sig(out[i, cppn.T_TONE]), 0.72 + 0.23 * sig(out[i, cppn.T_GRASS]))
-        size = round(float(0.5 + 1.0 * sig(out[i, cppn.T_SIZE])), 4)
-        entities.append(Entity(kind, x, float(heights[i]), size, color,
-                               round(float(sig(out[i, cppn.T_CLOUD_H])), 4)))
+        size = round(float(0.5 + 1.0 * sig(out[i, cppn.T_SIZE]) * shrink), 4)
+        return Entity(KINDS[int(np.argmax(out[i, cppn.T_KIND]))], float(xs[i]), float(heights[i]), size, color,
+                      round(float(sig(out[i, cppn.T_CLOUD_H])), 4))
+
+    for k in _local_maxima(density, threshold, xs[idx], MIN_GAP, width):
+        i = idx[k]
+        entities.append(entity_at(i))
+        # густое место - рядом ещё одна, поменьше: сторону и вид берёт из выходов сети там
+        if density[k] > threshold + 0.12:
+            side = 1 if out[i, cppn.T_TONE] > 0 else -1
+            entities.append(entity_at((i + side * COMPANION) % n, shrink=0.6))
+    entities.sort(key=lambda e: e.x)
 
     # дальние и средние горы: отсчёты через 1 м, сглаженные - это силуэты, а не рельеф
     ones = np.arange(0, n, 4)

@@ -528,8 +528,8 @@ def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thou
     draw_sky(p, f, world, t)
     pal = world.palette
     draw_clouds(p, f, world, t)
-    draw_layer(p, f, world, world.far, FAR_PAR, 0.62, 0.45, qc(pal["far"]))
-    draw_layer(p, f, world, world.mid, MID_PAR, 0.72, 0.55, qc(pal["mid"]))
+    draw_layer(p, f, world, world.far, FAR_PAR, 0.58, 0.3, qc(pal["far"]))
+    draw_layer(p, f, world, world.mid, MID_PAR, 0.7, 0.22, qc(pal["mid"]))
     haze = QLinearGradient(0, rect.top() + f.h * 0.45, 0, rect.top() + f.h * 0.8)
     haze.setColorAt(0, qc(pal["sky_bottom"], 0.0))
     haze.setColorAt(1, qc(pal["sky_bottom"], 0.25))

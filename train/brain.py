@@ -61,6 +61,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--minutes", type=float, default=10.0)
     ap.add_argument("--world-seconds", type=float, default=60.0)
+    ap.add_argument("--out", default="brain", help="имя модели в models/ (для опытов - другое)")
     args = ap.parse_args()
     m = models.load()
     rng = np.random.default_rng(0)
@@ -85,8 +86,8 @@ def main():
     seconds = time.time() - t0
     after = evaluate(brain, m)
     print("после:", after)
-    brain.save(model_file("brain.npz"))
-    write_passport("brain", {
+    brain.save(model_file(args.out + ".npz"))
+    write_passport(args.out, {
         "what": "стартовые веса мозга: рекуррентный слой 46 -> 64, головы суставов, прыжка, "
                 "критика и разговора, предсказатель 58 -> 96 -> 46",
         "how": "то же онлайн-обучение, что в игре (любопытство, актёр-критик), в череде миров",

@@ -105,7 +105,7 @@ class Life:
                 self.falls += 1
                 self.fell = FELL_MEMORY
                 self.extra += FALL_PENALTY
-        if self.human.fallen <= 0 and self.k % PHYSICS_PER_STEP == PHYSICS_PER_STEP - 1:
+        if self.human.grounded and self.human.fallen <= 0 and self.k % PHYSICS_PER_STEP == PHYSICS_PER_STEP - 1:
             self.extra += ALIVE
         self.k += 1
         self.time += DT

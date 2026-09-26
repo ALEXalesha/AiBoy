@@ -9,7 +9,7 @@
   ошибка - награда любопытства: своё тело он скоро предсказывает хорошо, а новое место -
   нет, поэтому любопытство тянет туда, где ещё не был. Ошибка делится на её скользящее
   среднее, чтобы награда не угасала вместе с ошибкой;
-- плюс 0.01 за каждый шаг на ногах и минус 1 за падение;
+- плюс 0.015 за каждый шаг на ногах (на земле, не лёжа) и минус 1 за падение;
 - **критик** оценивает состояние, TD(0); **актёр** - гауссова политика суставов и
   направления (шум коррелирован во времени, суставы движутся плавно) и Бернулли прыжка;
 - рекуррентный слой учится с усечением на один шаг: прошлое состояние для градиента -
@@ -24,7 +24,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from body import skeleton
-from brain.observe import OBS_DIM, observe
+from brain.observe import OBS_DIM, WORLD, observe
 from nn import io
 from nn.layers import Dense, ReLU, Sequential, sigmoid
 from nn.losses import mse
@@ -37,7 +37,7 @@ GAMMA = 0.95
 SIGMA = 0.22
 RHO = 0.95                                  # корреляция шума между шагами (~0.7 с)
 CUR_SCALE = 0.1
-ALIVE = 0.01
+ALIVE = 0.015                               # за шаг на ногах - это «устойчивость»
 FALL_PENALTY = -1.0
 LR = 3e-4
 LR_PRED = 1e-3
@@ -77,6 +77,7 @@ class Brain:
         self.steps = 0
         self.err_ema = None
         self.last_err = 0.0
+        self.last_seen_err = 0.0
         self.reward_ema = 0.0
         self.curiosity = 0.0
 
@@ -135,14 +136,20 @@ class Brain:
     def _curiosity(self, obs, learn):
         p_obs, _, p_act, p_jump = self.prev
         pin = np.concatenate([p_obs, p_act, [p_jump]]).astype(np.float32)[None]
-        err, grad = mse(self.pred.forward(pin), (obs - p_obs)[None])
+        pred = self.pred.forward(pin)
+        target = (obs - p_obs)[None]
+        err, grad = mse(pred, target)
+        seen = float(((pred - target)[0, WORLD] ** 2).mean())
         if learn:
             self.pred.backward(grad)
             clip_grads(self.pred.params(), 1.0)
             self.opt_pred.step()
         self.last_err = err
-        self.err_ema = err if self.err_ema is None else 0.995 * self.err_ema + 0.005 * err
-        ratio = min(err / (self.err_ema + 1e-8), 3.0)
+        self.last_seen_err = seen
+        # награда - ошибка в том, что он увидит (рельеф и сущности), а не в своём теле:
+        # тело он и так знает, а новое место - нет
+        self.err_ema = seen if self.err_ema is None else 0.995 * self.err_ema + 0.005 * seen
+        ratio = min(seen / (self.err_ema + 1e-8), 3.0)
         self.curiosity = 0.9 * self.curiosity + 0.1 * min(ratio / 2.0, 1.0)
         return CUR_SCALE * ratio
 
@@ -199,6 +206,6 @@ def run_steps(brain, human, world, steps, learn=True, explore=True):
         events = []
         for k in range(PHYSICS_PER_STEP):
             events += human.step(d.targets, d.turn, d.jump and k == 0)
-        extra = FALL_PENALTY if "fall" in events else (0.0 if human.fallen > 0 else ALIVE)
+        extra = FALL_PENALTY if "fall" in events else (ALIVE if human.grounded and human.fallen <= 0 else 0.0)
         log["events"] += events
     return log

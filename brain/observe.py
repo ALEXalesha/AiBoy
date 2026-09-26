@@ -16,6 +16,11 @@ TERRAIN = slice(0, len(OFFSETS))
 SEE = 10.0                                  # м - дальше сущностей не видно
 ENTITY = 3 + len(KINDS)
 OBS_DIM = len(OFFSETS) + 6 + len(skeleton.JOINTS) + 2 * ENTITY + 1
+ENTITIES = slice(len(OFFSETS) + 6 + len(skeleton.JOINTS), len(OFFSETS) + 6 + len(skeleton.JOINTS) + 2 * ENTITY)
+# «что увижу»: рельеф вокруг и сущности - то, что меняется, только когда он куда-то попал
+WORLD = np.zeros(OBS_DIM, bool)
+WORLD[TERRAIN] = True
+WORLD[ENTITIES] = True
 
 
 def nearest_entities(human, world, n=2, see=SEE):

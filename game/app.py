@@ -583,7 +583,16 @@ class SettingsPage(Page):
     def __init__(self, window):
         super().__init__(window)
         s = window.settings
-        outer = QVBoxLayout(self)
+        # в прокрутке: в низком окне строки не сжимаются, а уезжают вниз
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        inner = QWidget()
+        inner.setObjectName("page")
+        scroll.setWidget(inner)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(scroll)
+        outer = QVBoxLayout(inner)
         outer.setContentsMargins(24, 16, 24, 16)
         outer.setSpacing(14)
         outer.addWidget(label("Настройки", "heading"))

@@ -171,3 +171,45 @@ def test_brain_survives_closing_the_window(qapp):
         assert again.observe.life.world_seed == w.observe.life.world_seed
     finally:
         again.close()
+
+
+# Урок крестиков-ноликов: переносимую надпись (wordWrap) нельзя ограничивать по высоте.
+# На настоящем экране текст чуть шире, чем в offscreen, фраза переносится на вторую строку
+# и обрезается. Шрифт крупнее на 10% изображает этот «чуть шире».
+QWIDGETSIZE_MAX = 16777215
+
+
+def wrapped_labels(widget):
+    from PySide6.QtWidgets import QLabel
+    return [lb for lb in widget.findChildren(QLabel) if lb.wordWrap() and lb.isVisible() and lb.text()]
+
+
+def test_wrapping_labels_are_never_capped_in_height(win):
+    win.change_setting("phrase_freq", "often")
+    win.observe.advance(60 * 12)
+    for name, _ in app_module.PAGES:
+        win.show_page(name)
+        QTest.qWait(10)
+        capped = [lb.text() for lb in wrapped_labels(win) if lb.maximumHeight() < QWIDGETSIZE_MAX]
+        assert capped == [], (name, capped)
+
+
+@pytest.mark.parametrize("page", [name for name, _ in app_module.PAGES])
+@pytest.mark.parametrize("scale", [1.0, 1.1])
+def test_text_fits_at_minimum_window_size(qapp, page, scale):
+    from PySide6.QtWidgets import QLabel
+    w = app_module.MainWindow(autostart=False)
+    w.show()
+    w.change_setting("phrase_freq", "often")
+    w.observe.advance(60 * 12)
+    w.show_page(page)
+    qapp.processEvents()
+    for lb in w.findChildren(QLabel):
+        px = lb.font().pixelSize() if lb.font().pixelSize() > 0 else round(lb.font().pointSizeF() * 96 / 72)
+        lb.setStyleSheet(f"font-size: {round(px * scale)}px;")
+    w.resize(w.minimumSize())
+    QTest.qWait(30)
+    clipped = [(lb.text(), lb.height(), lb.heightForWidth(lb.width())) for lb in wrapped_labels(w.pages[page])
+               if lb.heightForWidth(lb.width()) > lb.height()]
+    w.close()
+    assert clipped == []

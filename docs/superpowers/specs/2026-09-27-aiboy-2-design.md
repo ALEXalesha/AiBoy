@@ -16,7 +16,9 @@ His answers, in order:
 - **food and drink:** he eats and drinks by himself;
 - **the dog:** a neural dog that he tames with food from his backpack, plays with using the
   same ball, and that sits, lies, swims, jumps "and all that";
-- **birds:** they learn to fly and flee from him and the dog.
+- **birds:** they learn to fly and flee from him and the dog;
+- **his mood:** his mood changes the chance that a dog comes and how many birds there are;
+- **speed:** add x16.
 
 Release: AiBoy 2.0.0, after 1.1.0 (the guitar), which ships separately. Extra ideas
 (skipping stones, kite, camera, net, snow) are not in this release.
@@ -40,8 +42,8 @@ The project rule stays. Everything that anybody does comes out of their own nump
 - the look of toys, food, fish, the dog and birds.
 
 The code only draws, runs the physics, synthesizes the sound of physical events and trains.
-No PyTorch, no GPU: CPU and real, visible attempts only. The existing x2/x4/x8 is the
-speed-up.
+No PyTorch, no GPU: CPU and real, visible attempts only. The speed-up is x2/x4/x8 and the
+new **x16** (see 3).
 
 ## 2. World size
 
@@ -83,7 +85,13 @@ Skills and heads learn separately, so a new activity cannot break an old one. St
 body seed in `skills/<seed>/`, `toys/<seed>/`: a new world with the same person keeps what
 he has learned.
 
-**Speed.** The guitar keeps its 1x while playing. At x4-x8 the other sounds are skipped.
+**Speed.** The speed button gets **x16**: `SPEEDS = (1, 2, 4, 8, 16)` in the settings.
+- At x4-x16 all sounds except the guitar's are skipped. The guitar keeps its 1x while
+  playing.
+- At x16 only what is near the camera runs full physics; far animals take the cheap step.
+- If a frame cannot keep up, the real speed drops rather than the physics step growing
+  (a bigger step would break contacts). The button then shows it honestly, for example
+  "x16 (сейчас x11)".
 For every learned skill the plan measures and records attempts to a visible improvement.
 
 ## 4. Physics
@@ -190,8 +198,12 @@ The look of the toys comes from a toy network by the chest seed.
 
 ## 8. The neural dog
 
-**When it appears.** With a chance per world (about 40%, a setting "Собака": never /
-sometimes / often). The dog network from the world seed gives:
+**When it appears.** A dog can appear when a world is created and can also wander in later.
+- The base chance comes from the setting "Собака": never / sometimes (about 40% per world) /
+  often.
+- **His mood changes it** (see 10): when he is in a good mood a dog comes more likely and
+  sooner; when he is sad, less likely. A dog that has not been tamed may leave after a
+  while and come back. The dog network from the world seed gives:
 - the look: size from small to large, colour, ears, tail;
 - the temperament: shyness, playfulness, stamina.
 
@@ -231,8 +243,11 @@ gives or what it finds, and sits or lies down, sometimes next to him.
 
 ## 9. Birds
 
-**When they appear.** From time to time a small flock (1-5) crosses the sky or lands on
-trees and on the ground. A bird network from the world seed gives:
+**When they appear.** From time to time a small flock crosses the sky or lands on trees
+and on the ground.
+- The setting "Птицы" (off / rare / often) gives the base rate.
+- **His mood changes it** (see 10): in a good mood flocks come more often and are bigger
+  (up to 8); when he is sad, rarer and smaller (1-2). A bird network from the world seed gives:
 - the look: size, colour, wing shape;
 - the kind: small fast birds or larger gliders.
 
@@ -272,6 +287,14 @@ wO·owner + wT·taste:
 - owner: 👍 +1 / 👎 −1 if given;
 - taste: food pleasure, for eating only.
 
+**Mood.** A slow average of all his P over the last minutes of game time, from −1 to 1.
+- It changes how the world answers him: the dog chance (8) and the birds (9).
+- It is shown in the panel as a face next to his needs.
+- It is a state flag for his speech, so he can say he is in a good mood.
+
+The mood is a sum of his own pleasures, not a network. The worlds and animals are still
+networks; the mood only sets their spawn rates within the settings.
+
 **Scoring and choosing:**
 - **Liking** per activity: a slow average of P (α = 0.05), in the save.
 - **Boredom** grows while he does an activity and fades while he does not.
@@ -310,7 +333,8 @@ wO·owner + wT·taste:
   - the dog and birds;
   - the "what he sees" overlay also shows the flight prediction when he catches, and the
     dog's trust when he tames it.
-- **Settings:** world size, "Собака", "Птицы" (off / rare / often).
+- **Settings:** world size, "Собака", "Птицы" (off / rare / often), speed up to x16.
+- **Panel:** a mood face next to the three need bars.
 
 ## 12. Saves and migration
 
@@ -377,8 +401,15 @@ above the first 20 by a margin. N and the margin are measured in the plan.
 - volume 0 opens no device;
 - x8 skips toy sounds and the guitar keeps its 1x.
 
+**Mood:** a good mood raises the dog chance and the number of birds, a bad one lowers them;
+"never" and "off" in the settings stay absolute.
+
+**Speed:**
+- x16 advances game time 16 times faster when the frame keeps up;
+- when it cannot, the physics step stays the same and the real speed shown is honest.
+
 **Performance:** x8 in a 1280 m world with a dog, birds and a toy stays within the 12 ms
-frame budget.
+frame budget; the real speed at x16 in the same world is measured and recorded.
 
 **Saves:** migration from 1.1.0; corrupted files.
 

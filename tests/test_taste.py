@@ -81,3 +81,16 @@ def test_trust_grows_with_consistent_ratings_and_stays_near_zero_for_random_ones
     assert trust_good[3] == 0.0 and 0.0 < trust_good[10] < trust_good[-1] <= 1.0
     assert good.trust() > 0.5
     assert noisy.trust() < 0.2
+
+
+def test_it_learns_a_taste_for_closeness_to_the_tune():
+    """Владельцу нравится, когда похоже на мелодию (A > 0.5), а ноты сами по себе ему
+    безразличны: вкус должен опереться на похожесть."""
+    rng = np.random.default_rng(5)
+    t = Taste()
+    for _ in range(40):
+        a = float(rng.random())
+        t.rate(taste.features(random_take(rng), a), 1 if a > 0.5 else -1)
+    tests = [(random_take(rng), float(rng.random())) for _ in range(200)]
+    hits = [(t.predict(taste.features(n, a)) > 0) == (a > 0.5) for n, a in tests if abs(a - 0.5) > 0.1]
+    assert np.mean(hits) >= 0.85

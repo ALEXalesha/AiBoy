@@ -86,3 +86,19 @@ def test_components_stay_in_range(a, b):
     for v in (parts.consonance, parts.rhythm, parts.novelty, parts.total):
         assert -1.0 <= v <= 1.0
     assert 0.0 <= reward.closeness(pa, ph) <= 1.0
+
+
+def test_extra_notes_over_the_tune_lower_closeness():
+    """Лишние ноты поверх точной мелодии - не бесплатны: иначе «бить всё подряд» было бы
+    так же хорошо, как сыграть мелодию."""
+    ph = songbook.phrases(songbook.by_name("Mary Had a Little Lamb"))[0]
+    exact = [Played(n.onset, n.pitch, n.dur, 1) for n in ph.notes]
+    extra = exact + [Played(n.onset + 1, n.pitch + 5, 1, 1) for n in ph.notes]
+    assert reward.closeness(extra, ph.notes) < 0.75
+
+
+def test_silence_itself_is_what_is_punished():
+    empty = reward.pleasant([], 8, [])
+    assert empty.silence == 1.0 and empty.total == -1.0
+    two = reward.pleasant(calm_line([48, 55]), 8, [])
+    assert two.silence == pytest.approx(0.5) and two.total < 0.2      # без штрафа было бы около 0.76

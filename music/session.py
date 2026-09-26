@@ -207,7 +207,8 @@ class Guitarist:
         a = None if attempt.phrase is None else reward.closeness(notes, attempt.phrase.notes)
         feats = features(notes, a, attempt.steps, attempt.meter)
         guess = self.taste.predict(feats)
-        c = float(rating) if rating is not None else (guess if self.taste.net is not None else None)
+        trust = self.taste.trust()
+        c = float(rating) if rating is not None else (guess * trust if self.taste.net is not None else None)
         total = reward.total(a, b.total, c)
         key = f"{attempt.tune}/{attempt.phrase.index}" if attempt.phrase is not None else "free"
         before = self.musician.baseline.get(key, total)
@@ -219,7 +220,8 @@ class Guitarist:
             "mode": self.mode, "tempo": attempt.tempo, "meter": attempt.meter, "steps": attempt.steps,
             "notes": [[t, s, f, force, d, snd] for (t, s, f, force, d), snd in zip(attempt.intended, attempt.sounded)],
             "A": a, "B": b.total, "C": None if rating is None else float(rating),
-            "taste": guess if self.taste.net is not None else None, "total": total, "rating": rating,
+            "taste": guess if self.taste.net is not None else None, "trust": trust, "total": total,
+            "rating": rating,
             "novelty": b.novelty, "motor": (float(np.mean([m[0] + m[1] for m in attempt.motor]) / 2)
                                              if attempt.motor else None)})
         if rating is not None:
@@ -240,7 +242,8 @@ class Guitarist:
         attempt, entry, feats, key = self.last
         if entry.get("rating") == rating:
             return entry
-        old_c = entry.get("C") if entry.get("C") is not None else (entry.get("taste") or 0.0)
+        old_c = (entry.get("C") if entry.get("C") is not None
+                 else (entry.get("taste") or 0.0) * entry.get("trust", 1.0))
         self.journal.rate(entry["id"], rating)
         entry["C"] = float(rating)
         entry["total"] = entry["total"] + reward.WEIGHTS["C"] * (rating - old_c)

@@ -41,6 +41,12 @@ def features(notes, closeness, steps=32, meter=8):
     return np.clip(f, -3.0, 3.0)
 
 
+TRUST_N = 10            # при стольких оценках доверие - половина
+TRUST_MIN_GUESSES = 5   # после стольких догадок доверие зависит от точности
+COIN = 0.6              # точность не выше - доверия нет
+GOOD = 0.8              # точность не ниже - доверие полное
+
+
 class Taste:
     def __init__(self):
         self.ratings = []           # [(признаки списком, +1 или -1)]
@@ -89,3 +95,14 @@ class Taste:
 
     def accuracy(self):
         return None if not self.guesses else self.hits / self.guesses
+
+    def trust(self):
+        """Насколько верить догадке в награде, 0..1: пока вкус не угадал хотя бы
+        TRUST_MIN_GUESSES оценок - 0; дальше растёт с числом оценок и падает до 0, если вкус
+        угадывает не лучше монетки. Замер: без этого восемь случайных оценок за 300 попыток
+        роняли похожесть на мелодию до 0 - догадка с самым большим весом перевешивала; с
+        доверием по числу оценок, но без проверки точности (0.1-0.3) - тоже."""
+        if self.guesses < TRUST_MIN_GUESSES:
+            return 0.0
+        n = len(self.ratings)
+        return n / (n + TRUST_N) * float(np.clip((self.accuracy() - COIN) / (GOOD - COIN), 0.0, 1.0))

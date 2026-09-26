@@ -57,6 +57,7 @@ LR = 1e-3
 SKIP_LR = 0.03             # прямой путь «нота сейчас» - простая линейная связь, ему шаг крупнее
 ENTROPY = 0.01
 BASELINE_K = 0.1
+ADV_CLIP = 5.0          # преимущество - не больше стольких разбросов (обычная игра до 5 не доходит)
 
 
 def pos_of(string, fret):
@@ -212,9 +213,14 @@ class Musician:
         """Один шаг после попытки. Возвращает использованное преимущество."""
         base = self.baseline.get(key, reward)
         var = self.spread.get(key, 0.05 ** 2)
-        advantage = (reward - base) / (np.sqrt(var) + 1e-3)
-        self.baseline[key] = base + BASELINE_K * (reward - base)
-        self.spread[key] = var + BASELINE_K * ((reward - base) ** 2 - var)
+        sd = np.sqrt(var) + 1e-3
+        # отклонение обрезано до ADV_CLIP разбросов: оценка владельца (±2 к награде) толкает
+        # в свою сторону сильнее всего, но не раздувает разброс - иначе обычный сигнал
+        # похожести на следующие ~20 попыток становится в разы слабее (замер в плане)
+        dev = float(np.clip(reward - base, -ADV_CLIP * sd, ADV_CLIP * sd))
+        advantage = dev / sd
+        self.baseline[key] = base + BASELINE_K * dev
+        self.spread[key] = var + BASELINE_K * (dev ** 2 - var)
         _, grad = self._loss_grad(take, advantage)
         self.backward(grad)
         clip_grads(self.params(), 5.0)

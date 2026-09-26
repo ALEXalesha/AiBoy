@@ -64,3 +64,20 @@ def test_features_are_bounded_and_fixed_size():
         f = taste.features(random_take(rng), 0.4)
         assert f.shape == (taste.FEATURES,) and np.isfinite(f).all() and np.abs(f).max() <= 3
     assert taste.features([], None).shape == (taste.FEATURES,)
+
+
+def test_trust_grows_with_consistent_ratings_and_stays_near_zero_for_random_ones():
+    """Догадка вкуса входит в награду с доверием: без оценок - 0; на согласных оценках растёт;
+    на случайных (вкус угадывает как монетка) - остаётся около 0, чтобы шум не увёл музыканта."""
+    assert Taste().trust() == 0.0
+    rng = np.random.default_rng(4)
+    good, noisy = Taste(), Taste()
+    trust_good = []
+    for i in range(60):
+        notes = random_take(rng)
+        good.rate(taste.features(notes, None), 1 if likes_high(notes) else -1)
+        noisy.rate(taste.features(notes, None), 1 if rng.random() < 0.5 else -1)
+        trust_good.append(good.trust())
+    assert trust_good[3] == 0.0 and 0.0 < trust_good[10] < trust_good[-1] <= 1.0
+    assert good.trust() > 0.5
+    assert noisy.trust() < 0.2

@@ -85,3 +85,17 @@ def test_arm_track_follows_commands_smoothly():
     track = session.arm_track(b, [(0, (1.0, 0.5, 0.5, 1.5))], 90)
     assert np.abs(np.diff(track, axis=0)).max() < 0.12
     assert track[-1] == pytest.approx([1.0, 0.5, 0.5, 1.5], abs=0.02)
+
+
+def test_a_few_random_ratings_do_not_ruin_learning_the_tune(tmp_path, body):
+    """Замер: восемь случайных 👍/👎 за 300 попыток без доверия к вкусу роняли похожесть на
+    «Twinkle» до 0 (догадка вкуса с весом 2 перевешивала всё). С доверием - учится как без
+    оценок."""
+    g = make(tmp_path)
+    for i in range(300):
+        a = g.attempt(body)
+        rating = (1 if i % 2 else -1) if i % 37 == 5 else None
+        g.finish(a, body, rating=rating)
+    first = songbook.BUILTIN[0].name
+    A = [e["A"] for e in g.journal.entries if e.get("tune") == first and e.get("phrase") == 0]
+    assert np.median(A[-50:]) > np.median(A[:50]) + 0.15

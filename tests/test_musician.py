@@ -98,3 +98,16 @@ def test_he_learns_the_tune_noticeably(tmp_path):
     closeness, _ = ml.run(attempts=200, seed=0, log=lambda *a: None)
     first, last = np.median(closeness[:20]), np.median(closeness[-20:])
     assert last > first + 0.2, (first, last)
+
+
+def test_an_owner_rating_pushes_hard_but_does_not_blow_up_the_spread(phrase):
+    """Оценка владельца - +2 к награде, это десятки обычных разбросов. Преимущество обрезано
+    до ADV_CLIP разбросов, и разброс растёт не больше, чем от такого отклонения: иначе
+    обычный сигнал похожести потом долго был бы в разы слабее."""
+    m = Musician(seed=0)
+    take = m.play(phrase.steps, phrase.meter, phrase.notes)
+    m.baseline["k"], m.spread["k"] = 0.3, 0.1 ** 2
+    used = m.learn(take, 0.3 + 2.0, key="k")
+    assert used == pytest.approx(musician.ADV_CLIP, rel=0.02)
+    assert m.spread["k"] <= 0.1 ** 2 * (1 + musician.BASELINE_K * (musician.ADV_CLIP ** 2 * 1.03 - 1))
+    assert m.baseline["k"] < 0.3 + 0.1 * musician.ADV_CLIP * musician.BASELINE_K * 1.03

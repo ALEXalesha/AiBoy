@@ -407,10 +407,11 @@ def draw_head(p, f, human, pts, t, speaking):
     back = 1 if human.facing > 0 else -1
     if b.hair_style in (0, 2):                         # шапка волос сверху и сзади
         p.setBrush(hair)
-        p.drawChord(rect, int((ang - 25 * back) * 16), int(160 * back * 16))
+        p.drawChord(rect, int((ang - 60 * back) * 16), int(160 * back * 16))
+        p.drawEllipse(at(-0.62, 0.05), r * 0.42, r * 0.5)
     elif b.hair_style == 1:                            # ёжик
         p.setBrush(hair)
-        p.drawChord(rect, int((ang - 10 * back) * 16), int(150 * back * 16))
+        p.drawChord(rect, int((ang - 50 * back) * 16), int(150 * back * 16))
         for k in range(5):
             a = -0.9 + k * 0.45
             tip = at(math.sin(a) * 1.45 - 0.1, math.cos(a) * 1.45)
@@ -419,7 +420,7 @@ def draw_head(p, f, human, pts, t, speaking):
             p.drawPolygon(QPolygonF([b1, tip, b2]))
     else:                                              # кепка цвета рубашки
         p.setBrush(qc(b.shirt, 1, 0.85))
-        p.drawChord(rect, int((ang - 15 * back) * 16), int(165 * back * 16))
+        p.drawChord(rect, int((ang - 70 * back) * 16), int(175 * back * 16))
         visor = QPolygonF([at(0.2, 0.35), at(1.45, 0.3), at(1.35, 0.15), at(0.3, 0.2)])
         p.drawPolygon(visor)
     # лицо

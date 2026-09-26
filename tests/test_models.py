@@ -91,9 +91,11 @@ def test_speech_differs_for_different_states(m):
 
 
 def test_voice_follows_its_teacher(m):
+    """На состояниях из настоящей жизни (как при обучении, но других миров)."""
     from teacher import voice as tv
+    from train.speech import collect_states
     rng = np.random.default_rng(5)
-    s = random_states(200, rng)
+    s = collect_states(300, seed=9, log=lambda *a: None)
     err = np.mean([(m.voice.params_for(x) - tv.target(x, rng, noise=0.0)) ** 2 for x in s])
     assert err < 0.02
 

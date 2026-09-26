@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+saves/
+.pytest_cache/
+.ci-venv/
+build/
+dist/
+*.spec
+selftest*.txt
+*.tmp

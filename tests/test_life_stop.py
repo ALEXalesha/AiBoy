@@ -31,7 +31,9 @@ def win(qapp):
 def bore(win):
     life = win.observe.life
     life.has_guitar = True
-    life.mood.world, life.mood.music, life.mood.world_time = 0.0, 0.9, 60.0
+    c = life.choice
+    c.acts["explore"].liking, c.acts["guitar"].liking, c.since = 0.0, 0.9, 60.0
+    life.decide_clock = 5.0
 
 
 def into_attempt(win, dev, at=1.0, limit=60 * 60):

@@ -66,3 +66,67 @@ def summary(models, brain_factory, seeds, seconds=60, learn=True):
     out["worlds"] = len(rows)
     out["moved_over_2m"] = int(sum(r["displacement_m"] > 2.0 for r in rows))
     return out, rows
+
+
+def obstacle_ahead(world, x, facing):
+    """Стена или обрыв в 2 м впереди - разворот там вынужденный, не по своей воле."""
+    g0 = world.height_at(x)
+    ahead = [world.height_at(x + facing * d) - g0 for d in np.arange(0.25, 2.01, 0.25)]
+    return max(ahead) > 0.8 or min(ahead) < -1.5
+
+
+def wander(models, brain, world_seed, width, minutes, navigator=None, body_seed=7, learn=True, nav_learn=None,
+           explored_after=None, pull_mark=False):
+    """Гуляет minutes минут, как в игре. Возвращает развороты: на первом круге и потом (по
+    своей воле и у препятствия), «туда-сюда» (два разворота за 5 с), осмотры, круги и долю
+    времени на первом круге, когда он шёл в начальную сторону."""
+    life = Life(models, world_seed, body_seed, width, brain, seed=world_seed, navigator=navigator)
+    life.learn = learn
+    life.nav_learn = nav_learn
+    h = life.human
+    lap = life.world.width if explored_after is None else explored_after
+    start_odo, f0 = h.odometer, h.facing
+    turns = []                  # (время, по своей воле, уже изучен)
+    first_lap_time = first_lap_fwd = 0.0
+    looks_after = 0
+    rng = np.random.default_rng(world_seed + 77)
+    fetched, pull_clock = 0, 0.0
+    if pull_mark:
+        # метка в случайном месте; то тянет к ней, то нет - как желание поиграть на гитаре,
+        # лежащей там (своё имя: настоящую гитару он подбирает, и её метка пропадает)
+        life.walk.places.marks["цель"] = float(rng.uniform(0, life.world.width))
+    for i in range(int(minutes * 3600)):
+        if pull_mark:
+            pull_clock += 1 / 60
+            if pull_clock >= 40.0:
+                pull_clock = 0.0
+                life.walk.pulls["цель"] = 1.0 if rng.random() < 0.5 else 0.0
+            if "цель" in life.walk.reached and life.walk.pulls.get("цель", 0) > 0:
+                fetched += 1
+                life.walk.places.marks["цель"] = float(rng.uniform(0, life.world.width))
+                life.walk.pulls["цель"] = 0.0
+                life.walk.reached.discard("цель")
+                life.walk.gap.pop("цель", None)
+        x, f = h.px, h.facing
+        looks = life.walk.looks
+        life.tick()
+        explored = h.odometer - start_odo >= lap
+        if not explored:
+            first_lap_time += 1
+            first_lap_fwd += 1 if h.facing == f0 else 0
+        elif life.walk.looks > looks:
+            looks_after += 1
+        if h.facing != f:
+            turns.append((life.time, not obstacle_ahead(life.world, x, f), explored))
+    later = [t for t in turns if t[2]]
+    later_min = max(1e-9, minutes - first_lap_time / 3600)
+    return {
+        "laps": round((h.odometer - start_odo) / life.world.width, 2),
+        "first_lap_turns": sum(1 for t in turns if not t[2]),
+        # доля первого круга в одну сторону (какую - неважно: мог сразу повернуть и идти)
+        "first_lap_forward": round(max(first_lap_fwd, first_lap_time - first_lap_fwd) / max(first_lap_time, 1), 3),
+        "turns_after": len(later), "voluntary_after": sum(1 for t in later if t[1]),
+        "per_min_after": round(len(later) / later_min, 2),
+        "back_forth": sum(1 for a, b in zip(turns, turns[1:]) if b[0] - a[0] < 5.0),
+        "looks_after": looks_after, "explored_minutes": round(later_min, 2), "fetched": fetched,
+    }

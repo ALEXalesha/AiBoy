@@ -66,15 +66,21 @@ def test_interest_follows_the_predictor_error(win):
     assert int(np.argmax(heats)) == 3 and heats[3] > 0.5 and max(heats[:3] + heats[4:]) == 0.0
 
 
-def test_intent_is_the_last_second_of_wishes(win):
+def test_intent_is_the_last_second_of_the_navigators_wish(win):
+    """Стрелка намерения - куда хочет навигатор (с 2.0 он решает, куда идти), за секунду."""
     from game.life import INTENT_K
     life = win.observe.life
     win.observe.advance(2)
+    life.walk.look_left = 0.0
     life.intent = 0.0
     life.tick()
-    life.tick()                           # одно решение мозга
-    assert life.intent == pytest.approx(INTENT_K * life.decision.turn)
+    assert life.intent == pytest.approx(INTENT_K * life.walk.want)
     assert perceive(life).intent == life.intent
+    life.walk.want = -life.walk.want      # передумал - стрелка поворачивает за секунду
+    for _ in range(120):
+        life.walk.clock = 0.0             # без новых решений
+        life.tick()
+    assert np.sign(life.intent) == np.sign(life.walk.want) and abs(life.intent) > 0.8
 
 
 def rect_of(widget, win):

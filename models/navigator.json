@@ -1,0 +1,143 @@
+{
+ "what": "навигатор - голова «гулять»: вперёд / назад / осмотреться по памяти мест",
+ "training": {
+  "worlds": 32,
+  "minutes_per_world": 6.0,
+  "widths": [
+   80,
+   160,
+   320
+  ],
+  "wall_minutes": 18.1,
+  "updates": 6006
+ },
+ "eval_worlds": [
+  [
+   900,
+   80
+  ],
+  [
+   901,
+   160
+  ],
+  [
+   902,
+   320
+  ],
+  [
+   903,
+   80
+  ],
+  [
+   904,
+   160
+  ],
+  [
+   905,
+   320
+  ]
+ ],
+ "history": [
+  {
+   "worlds": 0,
+   "score": -11.403,
+   "first_lap_forward": 0.515,
+   "first_lap_turns": 8.333,
+   "voluntary_after": 10.167,
+   "per_min_after": 4.2,
+   "back_forth": 0.0,
+   "looks_after": 11.667,
+   "fetched": 0.667
+  },
+  {
+   "worlds": 4,
+   "score": -2.71,
+   "first_lap_forward": 0.904,
+   "first_lap_turns": 0.333,
+   "voluntary_after": 0.5,
+   "per_min_after": 0.315,
+   "back_forth": 0.0,
+   "looks_after": 3.0,
+   "fetched": 0.667
+  },
+  {
+   "worlds": 8,
+   "score": 0.898,
+   "first_lap_forward": 0.904,
+   "first_lap_turns": 0.833,
+   "voluntary_after": 1.5,
+   "per_min_after": 0.673,
+   "back_forth": 0.0,
+   "looks_after": 11.833,
+   "fetched": 1.667
+  },
+  {
+   "worlds": 12,
+   "score": -1.942,
+   "first_lap_forward": 1.0,
+   "first_lap_turns": 0.0,
+   "voluntary_after": 0.5,
+   "per_min_after": 0.225,
+   "back_forth": 0.0,
+   "looks_after": 8.833,
+   "fetched": 1.667
+  },
+  {
+   "worlds": 16,
+   "score": 1.276,
+   "first_lap_forward": 0.812,
+   "first_lap_turns": 1.333,
+   "voluntary_after": 2.333,
+   "per_min_after": 1.182,
+   "back_forth": 0.0,
+   "looks_after": 8.0,
+   "fetched": 1.0
+  },
+  {
+   "worlds": 20,
+   "score": 2.252,
+   "first_lap_forward": 1.0,
+   "first_lap_turns": 0.0,
+   "voluntary_after": 2.833,
+   "per_min_after": 1.082,
+   "back_forth": 0.0,
+   "looks_after": 6.5,
+   "fetched": 0.667
+  },
+  {
+   "worlds": 24,
+   "score": 0.818,
+   "first_lap_forward": 0.935,
+   "first_lap_turns": 0.833,
+   "voluntary_after": 4.0,
+   "per_min_after": 1.712,
+   "back_forth": 0.0,
+   "looks_after": 11.333,
+   "fetched": 1.0
+  },
+  {
+   "worlds": 28,
+   "score": 0.51,
+   "first_lap_forward": 0.924,
+   "first_lap_turns": 1.0,
+   "voluntary_after": 1.833,
+   "per_min_after": 0.828,
+   "back_forth": 0.0,
+   "looks_after": 11.5,
+   "fetched": 0.667
+  },
+  {
+   "worlds": 32,
+   "score": -0.783,
+   "first_lap_forward": 0.895,
+   "first_lap_turns": 1.0,
+   "voluntary_after": 1.167,
+   "per_min_after": 0.427,
+   "back_forth": 0.0,
+   "looks_after": 11.667,
+   "fetched": 1.0
+  }
+ ],
+ "chosen_after_worlds": 20,
+ "chosen_score": 2.252
+}

@@ -22,7 +22,9 @@ def win(qapp):
 def bore(win):
     life = win.observe.life
     life.has_guitar = True
-    life.mood.world, life.mood.music, life.mood.world_time = 0.0, 0.9, 60.0
+    c = life.choice
+    c.acts["explore"].liking, c.acts["guitar"].liking, c.since = 0.0, 0.9, 60.0
+    life.decide_clock = 5.0
 
 
 def play_until(win, kind, limit=60 * 30):
@@ -119,7 +121,7 @@ def test_guitar_settings_are_saved(win):
         win.change_setting(name, value)
     saved = json.loads(open(paths.user_file("settings.json"), encoding="utf-8").read())
     assert (saved["guitar_mode"], saved["guitar_freq"], saved["volume"]) == ("hands", "often", 0)
-    assert win.observe.life.guitarist.mode == "hands" and win.observe.life.mood.freq == "often"
+    assert win.observe.life.guitarist.mode == "hands" and win.observe.life.choice.freq == "often"
 
 
 def changed_pixels(a, b, step=2):

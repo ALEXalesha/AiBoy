@@ -81,6 +81,28 @@ def starter_brain():
     return brain
 
 
+def starter_navigator():
+    """Стартовый навигатор из models/navigator.npz (обучен при сборке), иначе новый."""
+    from acts.explore.navigator import Navigator
+    nav = Navigator(seed=0)
+    try:
+        nav.load(model_path("navigator.npz"))
+    except Exception:  # noqa: BLE001 - нет файла или он чужой
+        nav = Navigator(seed=0)
+    return nav
+
+
+def user_navigator(path):
+    """Навигатор игрока; нет или битый - стартовый."""
+    from acts.explore.navigator import Navigator
+    nav = Navigator(seed=0)
+    try:
+        nav.load(path)
+        return nav
+    except Exception:  # noqa: BLE001
+        return starter_navigator()
+
+
 def user_brain(path):
     """Мозг игрока из папки данных; нет или битый - стартовый."""
     brain = Brain(seed=0)

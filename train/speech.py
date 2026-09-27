@@ -84,6 +84,13 @@ def augment(states, rng):
     r = rng.random(k.sum())
     s[k, IDX["got_it"]] = ((r < 0.25) & (s[k, IDX["learning_tune"]] > 0)).astype(np.float32)
     s[k, IDX["failing"]] = ((r > 0.75) & (s[k, IDX["learning_tune"]] > 0)).astype(np.float32)
+    # встал после игры; попросили положить гитару - согласился или нет
+    k = rng.random(n) < 0.05
+    s[k, IDX["stood_up"]] = 1.0
+    s[k, IDX["playing"]] = 0.0
+    k = rng.random(n) < 0.06
+    s[k, IDX["asked_put"]] = 1.0
+    s[k, IDX["agreed"]] = (rng.random(k.sum()) < 0.5).astype(np.float32)
     return s
 
 
@@ -124,6 +131,8 @@ def named_examples(net, rng):
     blue_tree = st(kind_tree=1, entity=1, entity_side=1, entity_dist=0.1, hue_cos=np.cos(2 * np.pi * 0.62),
                    hue_sin=np.sin(2 * np.pi * 0.62), sat=0.8, val=0.9)
     cases = {"учит мелодию": st(playing=1, learning_tune=1), "получилось": st(playing=1, learning_tune=1, got_it=1),
+             "встал после игры": st(stood_up=1), "попросили положить, согласился": st(asked_put=1, agreed=1),
+             "попросили положить, не хочет": st(asked_put=1, playing=1),
              "упал": st(fell=1.0), "холм справа": st(hill_right=1.0), "синее дерево рядом": blue_tree,
              "скучно": st(curiosity=0.05), "ночь": st(night=1.0, curiosity=0.4), "летит": st(airborne=1, grounded=0)}
     return {name: [net.sample(s, rng, TEMPERATURE) for _ in range(4)] for name, s in cases.items()}

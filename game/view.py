@@ -397,12 +397,13 @@ def draw_human(p, f, human, t, speaking=0.0, guitar=None):
 def draw_head(p, f, human, pts, t, speaking):
     b = human.body
     m = f.ppm
+    facing = getattr(human, "gaze", 0) or human.facing    # осматривается - голова смотрит назад
     c = f.P(pts["head"])
     r = b.head_r * m
     nx, ny = pts["head"][0] - pts["neck"][0], pts["head"][1] - pts["neck"][1]
     ln = math.hypot(nx, ny) or 1.0
     up = QPointF(nx / ln, -ny / ln)                   # вверх головы, в точках экрана (y вниз)
-    fwd = QPointF(-up.y() * human.facing, up.x() * human.facing)   # вперёд - по взгляду
+    fwd = QPointF(-up.y() * facing, up.x() * facing)   # вперёд - по взгляду
 
     def at(f_, u_):
         return QPointF(c.x() + fwd.x() * f_ * r + up.x() * u_ * r, c.y() + fwd.y() * f_ * r + up.y() * u_ * r)
@@ -416,7 +417,7 @@ def draw_head(p, f, human, pts, t, speaking):
     p.drawEllipse(c, r, r)
     ang = math.degrees(math.atan2(-up.y(), up.x()))    # угол «вверх» в градусах Qt
     rect = QRectF(c.x() - r * 1.04, c.y() - r * 1.04, r * 2.08, r * 2.08)
-    back = 1 if human.facing > 0 else -1
+    back = 1 if facing > 0 else -1
     if b.hair_style in (0, 2):                         # шапка волос сверху и сзади
         p.setBrush(hair)
         p.drawChord(rect, int((ang - 60 * back) * 16), int(160 * back * 16))

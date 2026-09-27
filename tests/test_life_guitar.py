@@ -1,13 +1,13 @@
-"""Гитара в жизни: лежит перед ним, подбирает, садится, когда мир надоел, попытки идут
-своим временем, мозг ходьбы в это время не учится, встаёт, когда надоела музыка."""
+"""Гитара в жизни: лежит перед ним, подбирает, садится, когда гитара тянет сильнее мира,
+попытки идут своим временем, мозг ходьбы в это время не учится, встаёт, когда надоела."""
 import numpy as np
 import pytest
 
 from brain.brain import Brain
 from game import models
+from acts.choice import DECIDE_EVERY, Choice
 from game.life import GUITAR_AHEAD, SIT_TIME, Life
 from music.journal import Journal
-from music.mood import Mood
 from music.musician import Musician
 from music.session import Guitarist
 from music.songbook import Songbook
@@ -18,16 +18,21 @@ def m():
     return models.load()
 
 
-def make(m, tmp_path, has_guitar=True, mood=None):
+def make(m, tmp_path, has_guitar=True, choice=None):
     g = Guitarist(Musician(seed=1), Journal(tmp_path / "j.json"), Songbook(tmp_path / "s.json"),
                   rng=np.random.default_rng(0))
-    return Life(m, 3, 4, 80.0, Brain(seed=0), seed=0, guitarist=g, has_guitar=has_guitar, mood=mood)
+    return Life(m, 3, 4, 80.0, Brain(seed=0), seed=0, guitarist=g, has_guitar=has_guitar, choice=choice)
 
 
 def bored_mood():
-    mood = Mood("often")
-    mood.world, mood.music, mood.world_time = 0.0, 0.8, 30.0
-    return mood
+    """Мир ему сейчас неинтересен, гитара тянет: выбор - сесть играть при первой точке выбора."""
+    c = Choice("often", np.random.default_rng(0))
+    c.acts["explore"].liking, c.acts["guitar"].liking, c.since = 0.0, 0.9, 30.0
+    return c
+
+
+def first_choice_now(life):
+    life.decide_clock = DECIDE_EVERY
 
 
 def test_guitar_lies_ahead_and_is_picked_up_when_he_passes(m, tmp_path):
@@ -39,7 +44,8 @@ def test_guitar_lies_ahead_and_is_picked_up_when_he_passes(m, tmp_path):
 
 
 def test_bored_of_the_world_he_sits_down_and_plays(m, tmp_path):
-    life = make(m, tmp_path, mood=bored_mood())
+    life = make(m, tmp_path, choice=bored_mood())
+    first_choice_now(life)
     events = []
     for _ in range(3):
         events += life.tick()
@@ -47,7 +53,8 @@ def test_bored_of_the_world_he_sits_down_and_plays(m, tmp_path):
 
 
 def test_an_attempt_takes_its_own_time_and_the_walking_brain_rests(m, tmp_path):
-    life = make(m, tmp_path, mood=bored_mood())
+    life = make(m, tmp_path, choice=bored_mood())
+    first_choice_now(life)
     life.tick()
     assert life.playing
     steps = life.brain.steps
@@ -71,7 +78,8 @@ def test_an_attempt_takes_its_own_time_and_the_walking_brain_rests(m, tmp_path):
 
 
 def test_he_sits_while_playing_and_arms_follow_the_attempt(m, tmp_path):
-    life = make(m, tmp_path, mood=bored_mood())
+    life = make(m, tmp_path, choice=bored_mood())
+    first_choice_now(life)
     for _ in range(int(60 * 3)):
         life.tick()
     a = life.attempt
@@ -81,23 +89,36 @@ def test_he_sits_while_playing_and_arms_follow_the_attempt(m, tmp_path):
     assert life.human.angles[6] > 1.0                     # бёдра вперёд - сидит
 
 
-def test_boring_music_makes_him_stand_up(m, tmp_path):
-    life = make(m, tmp_path, mood=bored_mood())
+def test_boring_music_makes_him_stand_up_and_say_so(m, tmp_path):
+    life = make(m, tmp_path, choice=bored_mood())
+    first_choice_now(life)
     life.tick()
-    life.mood.music = 0.0
-    life.mood.world = 1.0
-    stood = False
+    assert life.playing
+    c = life.choice
+    flags_when_speaking = []
+    say = life.say
+
+    def spy():
+        flags_when_speaking.append(dict(life.music_flags))
+        return say()
+    life.say = spy
+    stood, said = False, None
     for _ in range(60 * 60):
-        life.mood.music = 0.0
-        if ("stand",) in life.tick():
+        c.acts["guitar"].liking, c.acts["explore"].liking = 0.0, 1.0
+        events = life.tick()
+        if ("stand",) in events:
             stood = True
+            said = [e[1] for e in events if e[0] == "phrase"]
             break
     assert stood and not life.playing
     assert len(life.guitarist.journal.entries) >= 3            # не раньше трёх попыток
+    assert said and said[-1].strip()                           # и говорит об этом:
+    assert flags_when_speaking[-1].get("stood_up") == 1.0      # фраза - о том, что встал
 
 
 def test_owner_rating_during_an_attempt_goes_into_it(m, tmp_path):
-    life = make(m, tmp_path, mood=bored_mood())
+    life = make(m, tmp_path, choice=bored_mood())
+    first_choice_now(life)
     for _ in range(60 * 3):
         life.tick()
     life.rate(1)
@@ -112,7 +133,7 @@ def test_owner_rating_during_an_attempt_goes_into_it(m, tmp_path):
 
 
 def test_no_guitarist_no_guitar_play(m, tmp_path):
-    life = Life(m, 3, 4, 80.0, Brain(seed=0), seed=0, has_guitar=True, mood=bored_mood())
+    life = Life(m, 3, 4, 80.0, Brain(seed=0), seed=0, has_guitar=True, choice=bored_mood())
     for _ in range(30):
         life.tick()
     assert not life.playing

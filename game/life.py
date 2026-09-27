@@ -6,7 +6,8 @@ tick() - один шаг физики (1/60 с); каждый второй ша�
 журнала), ("stand",) - встал.
 
 Гитара лежит в полутора метрах перед ним, подбирает, проходя рядом, и дальше носит её с
-собой. Играть ли - решает music/mood.py: мир надоел сильнее музыки - садится. Пока играет,
+собой. Играть ли - решает общий выбор занятий (acts/choice.py): гитара тянет сильнее мира -
+садится, мир снова сильнее (гитара надоела - скука растёт с игрой подряд) - встаёт. Пока играет,
 мозг ходьбы не делает шагов и не учится, тело сидит, руки - по попытке.
 Окно только рисует и играет звук; самопроверка и кадры README гоняют то же самое.
 """
@@ -14,13 +15,15 @@ import math
 
 import numpy as np
 
+from acts.explore.navigator import LOOK_TIME, Walk
+from body import skeleton
 from body.cppn import generate_body
 from body.physics import DT, Human
 from brain.brain import ALIVE, FALL_PENALTY, LR, PHYSICS_PER_STEP, PLAY_LR, PLAY_NOISE
 from brain.observe import observe
 from brain.state import summarize
 from music import hands
-from music.mood import Mood
+from acts.choice import DECIDE_EVERY, STICK, Choice, pleasure
 from music.session import FPS
 from world.generate import generate
 
@@ -30,16 +33,20 @@ RECENT = 8                 # фраз, которые сеть не повтор
 CANDIDATES = 3             # выборок речи на одну фразу
 TEMPERATURE = 0.75
 LOG_EVERY = 0.5            # с - точка графика любопытства
-INTENT_K = 1.0 - math.exp(-1.0 / 30)   # намерение усредняется за секунду (мозг - 30 раз в секунду)
+INTENT_K = 1.0 - math.exp(-DT / 1.0)   # намерение усредняется за секунду
+STAND = tuple(skeleton.rest_angles())  # стоит и осматривается
 GUITAR_AHEAD = 1.5         # м - где лежит гитара от места появления
 PICKUP = 0.8               # м - подбирает, проходя ближе
 ATTEMPT_PAUSE = 0.8        # с тишины между попытками
 SIT_TIME = 1.0             # с - садится и берёт гитару, прежде чем заиграть
+PUT_T = 0.1                # «положить или взять с собой» - температура решения
+ASK_T = 0.1                # «положи гитару» - температура согласия
+SEEK_MAX = 90.0            # с - столько идёт к положенной гитаре, потом решает заново
 
 
 class Life:
     def __init__(self, models, world_seed, body_seed, width, brain, frequency="normal", seed=None,
-                 guitarist=None, has_guitar=False, guitar_freq="sometimes", mood=None):
+                 guitarist=None, has_guitar=False, guitar_freq="sometimes", choice=None, navigator=None):
         self.models = models
         self.world_seed, self.body_seed = int(world_seed), int(body_seed)
         self.world = generate(models.world_genome, world_seed, width)
@@ -51,6 +58,7 @@ class Life:
         self.rng = np.random.default_rng(seed if seed is not None else [world_seed, body_seed])
         self.frequency = frequency
         self.learn = True
+        self.nav_learn = None      # None - как learn; отдельно - для обучения навигатора при сборке
         self.noise = PLAY_NOISE    # в игре шум исследования меньше, чем при обучении
         self.last_obs = None       # наблюдение мозга на последнем шаге - для «что видит»
         self.obs_x = self.obs_ground = 0.0
@@ -73,7 +81,14 @@ class Life:
         self.guitarist = guitarist
         self.has_guitar = has_guitar
         self.guitar_x = self.human.px + GUITAR_AHEAD * self.human.facing
-        self.mood = mood if mood is not None else Mood(guitar_freq)
+        if navigator is None:
+            from game.models import starter_navigator
+            navigator = starter_navigator()
+        nav_rng = np.random.default_rng([int(world_seed), int(body_seed), 7] if seed is None else [int(seed), 7])
+        self.walk = Walk(self.world.width, self.human.facing, navigator, nav_rng)
+        self.choice = choice if choice is not None else Choice(guitar_freq, np.random.default_rng(self.rng.integers(2 ** 31)))
+        self.decide_clock = 0.0
+        self.scores = []           # успех прошлых попыток гитары - для «роста»
         self.playing = False
         self.sitting_for = 0.0
         self.attempt = None
@@ -83,6 +98,8 @@ class Life:
         self.guitar_time = 0.0
         self.music_flags = {}
         self.stopped = False
+        self.guitar_laid = False    # сам положил гитару (а не лежит с начала мира)
+        self.seeking = None        # с какого времени идёт к положенной гитаре
 
     @property
     def distance(self):
@@ -90,7 +107,8 @@ class Life:
 
     def state(self):
         d = self.decision
-        return summarize(self.human, self.world, d.turn if d else 0.0, d.want_jump if d else 0.0,
+        way = 0.0 if self.walk.looking else float(self.walk.want)
+        return summarize(self.human, self.world, way if d else 0.0, d.want_jump if d else 0.0,
                          self.brain.curiosity, self.fell / FELL_MEMORY, music=self.music_flags)
 
     def say(self):
@@ -121,12 +139,32 @@ class Life:
         if self.playing:
             return self._guitar_tick()
         events = []
+        h = self.human
+        br = self.brain
+        interest = br.last_seen_err / (br.err_ema + 1e-12) if br.err_ema else 1.0
+        self.walk.learn = self.learn if self.nav_learn is None else self.nav_learn
+        want = self.walk.tick(self.time, DT, h.px, h.facing, interest,
+                              can_decide=h.grounded and h.fallen <= 0 and self.decision is not None)
+        self.intent += ((0.0 if self.walk.looking else want) - self.intent) * INTENT_K
+        left = self.walk.look_left
+        # осматривается: сначала оглядывается назад, потом снова вперёд (голова, не тело)
+        h.gaze = -h.facing if 0.5 < left < LOOK_TIME - 0.5 else 0
+        if self.walk.looking and h.grounded and h.fallen <= 0:
+            # стоит и осматривается: мозг ходьбы не шагает, ноги замирают как были (иначе
+            # переход в стойку толкает его вперёд), руки опускаются
+            targets = h.angles.copy()
+            targets[2:6] = STAND[2:6]
+            happened = h.step(list(targets), want, False)
+            for e in happened:
+                events.append((e,))
+            self._clock_tick()
+            self._world_guitar(events)
+            return events
         if self.k % PHYSICS_PER_STEP == 0:
             obs = observe(self.human, self.world)
             self.last_obs, self.obs_x = obs, self.human.px
             self.obs_ground = self.world.height_at(self.human.px)
             self.decision, reward = self.brain.step(obs, self.extra, learn=self.learn, noise=self.noise)
-            self.intent += (self.decision.turn - self.intent) * INTENT_K
             if reward is not None:
                 self.reward_sum += reward
                 self.reward_n += 1
@@ -135,7 +173,8 @@ class Life:
                 events.append(("phrase", self.say()))
             self.extra = 0.0
         d = self.decision
-        happened = self.human.step(d.targets, d.turn, d.jump and self.k % PHYSICS_PER_STEP == 0)
+        # куда идти решает навигатор; выход «куда» мозга ходьбы больше не разворачивает
+        happened = self.human.step(d.targets, want, d.jump and self.k % PHYSICS_PER_STEP == 0)
         for e in happened:
             events.append((e,))
             if e == "jump":
@@ -151,6 +190,7 @@ class Life:
         return events
 
     def _clock_tick(self):
+        self.choice.tick(DT)
         self.k += 1
         self.time += DT
         self.since_phrase += DT
@@ -163,30 +203,107 @@ class Life:
             del self.curiosity_log[:-240]
 
     # --- гитара ---
+    def available(self):
+        acts = ["explore"]
+        if self.guitarist is not None and (self.has_guitar or self.guitar_laid):
+            acts.append("guitar")
+        return acts
+
     def _world_guitar(self, events):
-        self.mood.world_tick(self.brain.err_ema, DT)
+        self.choice.world_interest(self.brain.err_ema, DT)
+        self.decide_clock += DT
         if not self.has_guitar:
             w = self.world.width
             dx = (self.guitar_x - self.human.px + w / 2) % w - w / 2
-            if abs(dx) < PICKUP:
-                self.has_guitar = True
+            # гитару с начала мира подбирает, проходя; ту, что положил сам, - когда пришёл играть
+            if abs(dx) < PICKUP and (not self.guitar_laid or self.seeking is not None):
+                came_to_play = self.seeking is not None
+                self.pick_guitar()
                 events.append(("pickup",))
-        elif (self.guitarist is not None and self.mood.want_play() and self.human.grounded
-              and self.human.fallen <= 0):
-            self.sit_down()
-            events.append(("sit",))
+                if came_to_play and self.human.grounded and self.human.fallen <= 0:
+                    self.sit_down()
+                    events.append(("sit",))
+                return
+            if self.seeking is not None and self.time - self.seeking > SEEK_MAX:
+                self.seeking = None                 # не дошёл - решит заново
+                self.walk.pulls.pop("гитара", None)
+        if (self.guitarist is not None and self.seeking is None and self.decide_clock >= DECIDE_EVERY
+                and self.human.grounded and self.human.fallen <= 0 and not self.walk.looking):
+            self.decide_clock = 0.0
+            if self.choice.choose(self.available()) == "guitar":
+                if self.has_guitar:
+                    self.sit_down()
+                    events.append(("sit",))
+                else:
+                    # гитара лежит, где он её положил: он идёт к ней (куда - решает навигатор
+                    # по памяти мест, метка «гитара» тянет), играть - когда дойдёт
+                    self.choice.switch("explore")
+                    self.seeking = self.time
+                    self.walk.pulls["гитара"] = 1.0
+
+    def pick_guitar(self):
+        self.has_guitar = True
+        self.guitar_laid = False
+        self.seeking = None
+        self.walk.pulls.pop("гитара", None)
+        self.walk.places.marks.pop("гитара", None)
+
+    def put_guitar(self):
+        """Кладёт гитару на землю, где стоит; место - в памяти мест."""
+        self.has_guitar = False
+        self.guitar_laid = True
+        self.guitar_x = self.human.px
+        self.walk.places.marks["гитара"] = self.guitar_x
+        self.walk.pulls.pop("гитара", None)
+
+    def wants_to_leave_it(self):
+        """Вставая: положить гитару здесь или взять с собой. Нравится играть - берёт с собой (скоро
+        захочется снова), тянет гулять далеко - кладёт, чтобы не мешала. Softmax, не правило."""
+        c = self.choice
+        carry = c.acts["guitar"].liking
+        leave = c.acts["explore"].pull()
+        return self.rng.random() < 1.0 / (1.0 + math.exp(-(leave - carry) / PUT_T))
+
+    def ask_put(self):
+        """«Положи гитару» от владельца - просьба: согласие тем вероятнее, чем меньше ему сейчас
+        хочется играть. Возвращает (согласился, события) или None, если гитары у него нет."""
+        if not self.has_guitar or self.stopped:
+            return None
+        c = self.choice
+        g = c.acts["guitar"].pull() + (STICK if self.playing else 0.0)
+        e = c.acts["explore"].pull()
+        agree = self.rng.random() < 1.0 / (1.0 + math.exp((g - e) / ASK_T))
+        events = []
+        playing = self.playing
+        if agree:
+            if playing:
+                self.attempt = None              # идущая попытка брошена без записи
+                self.stand_up()
+                events.append(("stand",))
+            self.put_guitar()
+            events.append(("put",))
+        self.music_flags = {"asked_put": 1.0, "agreed": 1.0 if agree else 0.0, "refused": 0.0 if agree else 1.0,
+                            "playing": 1.0 if (playing and not agree) else 0.0}
+        events.append(("phrase", self.say()))
+        self.music_flags = {"playing": 1.0} if self.playing else {}
+        return agree, events
 
     def sit_down(self):
+        self.walk.rest(self.human.facing)
         self.playing = True
-        self.mood.start()
+        if self.choice.current != "guitar":
+            self.choice.switch("guitar")
         self.attempt = None
         self.sitting_for = 0.0
         self.music_flags = {"playing": 1.0}
 
     def stand_up(self):
+        self.walk.rest(self.human.facing)
         self.playing = False
         self.attempt = None
-        self.mood.stop()
+        if self.choice.current != "explore":
+            self.choice.switch("explore")
+        self.decide_clock = 0.0
         self.music_flags = {}
         self.brain.reset_memory()
 
@@ -225,7 +342,12 @@ class Life:
         if self.play_t >= a.duration + ATTEMPT_PAUSE:
             entry, progress, novelty = g.finish(a, self.body, rating=self.pending_rating)
             self.last_entry = entry
-            self.mood.after_attempt(novelty, progress)
+            # успех для удовольствия: и похоже ли на мелодию, и приятно ли звучит - новичку
+            # нравится играть, даже когда на мелодию ещё не похоже
+            nice = (entry["B"] + 1.0) / 2.0
+            success = nice if entry["A"] is None else 0.5 * (entry["A"] + nice)
+            self.choice.after_attempt("guitar", pleasure(success, self.scores, entry.get("rating")))
+            self.scores = (self.scores + [success])[-20:]
             best = max([e["A"] for e in g.journal.entries[:-1] if e.get("tune") == entry["tune"]
                         and e.get("phrase") == entry["phrase"] and e.get("A") is not None] or [0.0])
             got = entry["A"] is not None and entry["A"] >= 0.6 and entry["A"] > best
@@ -236,9 +358,15 @@ class Life:
             if self.since_phrase >= PHRASE_PAUSE[self.frequency] or got:
                 events.append(("phrase", self.say()))
             self.attempt = None
-            if self.mood.want_stop():
+            if self.choice.choose(self.available()) != "guitar":
                 self.stand_up()
+                self.music_flags = {"stood_up": 1.0}
                 events.append(("stand",))
+                events.append(("phrase", self.say()))
+                self.music_flags = {}
+                if self.wants_to_leave_it():
+                    self.put_guitar()
+                    events.append(("put",))
         self._clock_tick()
         return events
 

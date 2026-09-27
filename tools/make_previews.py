@@ -107,7 +107,9 @@ def guitar_shots(window):
     life = obs.life
     train_guitar(window, life)
     life.has_guitar = True
-    life.mood.world, life.mood.music, life.mood.world_time = 0.0, 0.9, 60.0
+    c = life.choice
+    c.acts["explore"].liking, c.acts["guitar"].liking, c.since = 0.0, 0.9, 60.0
+    life.decide_clock = 5.0
     window.change_setting("show_vision", False)
     window.show_page("observe")
     # садится и играет; кадр - сразу после удара по струне, чтобы горел палец на грифе

@@ -206,6 +206,11 @@ class ObservePage(Page):
         self.vision_button.setCheckable(True)
         self.vision_button.setChecked(s.show_vision)
         col.addWidget(self.vision_button)
+        # пока он гуляет с гитарой за спиной; когда играет - такая же кнопка у 👍/👎
+        self.put_button = button("Положи гитару", None, lambda: self.ask_put())
+        self.put_button.setToolTip("Просьба, а не команда: он решает сам")
+        self.put_button.hide()
+        col.addWidget(self.put_button)
         col.addWidget(label("Скорость", "muted"))
         box, self.speed_buttons = segmented({k: f"x{k}" for k in SPEEDS},
                                             lambda k: window.change_setting("speed", k))
@@ -237,8 +242,10 @@ class ObservePage(Page):
         width = width or WORLD_WIDTH[w.settings.world_size]
         g = gstore.load(body_seed, w.songbook, mode=w.settings.guitar_mode)
         self.life = Life(w.models, world_seed, body_seed, width, w.brain, frequency=w.settings.phrase_freq,
+                         navigator=w.navigator,
                          guitarist=g, has_guitar=gstore.has_guitar(g), guitar_freq=w.settings.guitar_freq)
         self.show_guitar(False)
+        self.refresh_put()
         self.counted_time = self.counted_dist = 0.0
         self.acc = 0.0
         self.view.set_life(self.life)
@@ -349,6 +356,27 @@ class ObservePage(Page):
             return 1
         return self.speed
 
+    def ask_put(self):
+        """«Положи гитару»: просьба к нему; ответ - в чат от сети речи."""
+        life = self.life
+        if life is None:
+            return None
+        res = life.ask_put()
+        if res is None:
+            return None
+        agree, events = res
+        self.handle(life, events)
+        self.sync_sound()
+        self.refresh_put()
+        return agree
+
+    def refresh_put(self):
+        """Кнопки «Положи гитару» активны, только пока гитара у него в руках или за спиной."""
+        on = self.life is not None and self.life.has_guitar
+        self.guitar_panel.put.setEnabled(on)
+        self.put_button.setEnabled(on)
+        self.put_button.setVisible(on and not self.life.playing)
+
     def after_rating(self, rating):
         """Оценка законченной попытке (в идущую попадёт вместе с попыткой - add_attempt)."""
         self.save_guitar()
@@ -435,7 +463,23 @@ class ObservePage(Page):
         if life is None:
             return
         life.frequency = w.settings.phrase_freq
-        for kind, *data in life.tick():
+        self.handle(life, life.tick())
+        if life.playing:
+            w.stats.guitar_time += DT
+        self.curve_clock += DT
+        if self.curve_clock >= CURVE_EVERY:
+            self.curve_clock = 0.0
+            value = life.take_reward()
+            w.stats.add_life(life.time - self.counted_time, life.distance - self.counted_dist)
+            self.counted_time, self.counted_dist = life.time, life.distance
+            if value is not None:
+                w.stats.add_curve(w.stats.lived, value)
+            self.update_entry()
+
+    def handle(self, life, events):
+        """События жизни - в чат, статистику, панель гитары и звук."""
+        w = self.window_
+        for kind, *data in events:
             if kind == "phrase":
                 self.chat.add(life.time, data[0])
                 w.stats.add_phrase(data[0])
@@ -456,17 +500,10 @@ class ObservePage(Page):
                 self.save_guitar()
             elif kind == "stand":
                 self.show_guitar(False)
-        if life.playing:
-            w.stats.guitar_time += DT
-        self.curve_clock += DT
-        if self.curve_clock >= CURVE_EVERY:
-            self.curve_clock = 0.0
-            value = life.take_reward()
-            w.stats.add_life(life.time - self.counted_time, life.distance - self.counted_dist)
-            self.counted_time, self.counted_dist = life.time, life.distance
-            if value is not None:
-                w.stats.add_curve(w.stats.lived, value)
-            self.update_entry()
+            elif kind == "put":
+                self.save_guitar()
+            if kind in ("pickup", "put", "sit", "stand"):
+                self.refresh_put()
 
     def refresh_panel(self):
         life = self.life
@@ -869,6 +906,8 @@ class MainWindow(QMainWindow):
         self.gallery = Gallery.load(self.gallery_path)
         self.models = models.load()
         self.brain, self.brain_from_user = models.user_brain(self.brain_path)
+        self.navigator_path = paths.user_file("navigator.npz")
+        self.navigator = models.user_navigator(self.navigator_path)
         self.last_brain_save = time.monotonic()
         self.songbook = Songbook.load(paths.user_file("songbook.json"))
         self.audio = AudioOut(self.settings.volume)
@@ -990,7 +1029,7 @@ class MainWindow(QMainWindow):
         elif name == "guitar_freq":
             life = self.observe.life
             if life is not None:
-                life.mood.freq = value
+                life.choice.freq = value
 
     def apply_theme(self, name):
         self.setStyleSheet(theme.qss(name))
@@ -1007,6 +1046,7 @@ class MainWindow(QMainWindow):
     def save_brain(self):
         try:
             self.brain.save(self.brain_path)
+            self.navigator.save(self.navigator_path)
             self.last_brain_save = time.monotonic()
             return True
         except OSError:

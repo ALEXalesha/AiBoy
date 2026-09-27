@@ -27,7 +27,7 @@ from game.settings import (FREQ_NAMES, GUITAR_FAST_NAMES, GUITAR_FREQ_NAMES, GUI
                            SPEEDS, WORLD_WIDTH, Settings)
 from game.stats import Stats
 from game.version import VERSION
-from game.view import WorldView, draw_scene, thumbnail
+from game.view import RingMap, WorldView, draw_scene, thumbnail
 from game.window_state import WindowMemory
 from game.ui import Page, button, card, label, meters, plural, segmented
 from game.audio import SR, AudioOut
@@ -35,6 +35,7 @@ from game.keyboard import KeyboardPage
 from game import guitar_store as gstore
 from game.guitar_panel import GuitarPanel
 from game.attempts import AttemptsPage
+from game.catalog import CatalogPage
 from music.songbook import Songbook
 from music.string import shared_bank
 from body.cppn import generate_body
@@ -56,7 +57,9 @@ ABOUT = ("Этот мир и человечка в нём придумали н�
 CHAT_HEIGHT = 150
 CHAT_HEIGHT_PLAYING = 104
 RECENT_NAMES = 12             # столько последних миров не повторяют имя нового
-PAGES = (("observe", "Наблюдение"), ("gallery", "Галерея"), ("attempts", "Попытки"), ("teach", "Научить мелодии"),
+# «Научить мелодии» с 2.0 открывается из «Каталога» (карточка гитары) - вкладок иначе не
+# хватает на окно в 900 px
+PAGES = (("observe", "Наблюдение"), ("catalog", "Каталог"), ("gallery", "Галерея"), ("attempts", "Попытки"),
          ("stats", "Статистика"), ("settings", "Настройки"))
 
 
@@ -147,6 +150,8 @@ class ObservePage(Page):
         self.paused = False
         self.acc = 0.0
         self.sounding = None          # попытка, чей звук сейчас в канале гитары
+        self.lived_acc = self.wall_acc = 0.0
+        self.real_speed = None        # замеренная скорость жизни (x), None - ещё не мерили
         self.counted_time = 0.0
         self.counted_dist = 0.0
         self.curve_clock = 0.0
@@ -196,6 +201,9 @@ class ObservePage(Page):
         col.addSpacing(8)
         col.addWidget(label("Любопытство", "section"))
         col.addWidget(label("ошибка его предсказателя: чем выше, тем больше нового", "hint", wrap=True))
+        self.ring = RingMap(window.colors())
+        self.ring.setToolTip("Весь мир-кольцо: оранжевая черта - он, белая точка - сундук, цветная - гитара")
+        col.addWidget(self.ring)
         self.spark = Sparkline()
         col.addWidget(self.spark)
         col.addSpacing(8)
@@ -215,6 +223,9 @@ class ObservePage(Page):
         box, self.speed_buttons = segmented({k: f"x{k}" for k in SPEEDS},
                                             lambda k: window.change_setting("speed", k))
         col.addWidget(box)
+        self.real_label = label("", "hint", wrap=True)
+        self.real_label.hide()
+        col.addWidget(self.real_label)
         col.addSpacing(6)
         col.addWidget(button("Новый мир", "primary", lambda: self.new_world()))
         col.addWidget(button("Новый человечек", None, lambda: self.new_human()))
@@ -243,12 +254,13 @@ class ObservePage(Page):
         g = gstore.load(body_seed, w.songbook, mode=w.settings.guitar_mode)
         self.life = Life(w.models, world_seed, body_seed, width, w.brain, frequency=w.settings.phrase_freq,
                          navigator=w.navigator,
-                         guitarist=g, has_guitar=gstore.has_guitar(g), guitar_freq=w.settings.guitar_freq)
+                         guitarist=g, guitar_freq=w.settings.guitar_freq)   # гитара - в сундуке
         self.show_guitar(False)
         self.refresh_put()
         self.counted_time = self.counted_dist = 0.0
         self.acc = 0.0
         self.view.set_life(self.life)
+        self.ring.set_life(self.life)
         self.chat.clear_messages(f"{self.life.body.name} в мире {self.life.world.name}. Здесь появятся его фразы")
         if entry_id is None:
             interest = interest_score(self.life.world)["total"]
@@ -341,7 +353,6 @@ class ObservePage(Page):
     def save_guitar(self):
         life = self.life
         if life is not None and life.guitarist is not None:
-            gstore.set_has_guitar(life.guitarist, life.has_guitar)
             gstore.save(life.guitarist)
 
     def show_guitar(self, on):
@@ -436,15 +447,24 @@ class ObservePage(Page):
             speed = self.effective_speed()
             self.acc = min(self.acc + dt * speed, MAX_BACKLOG * speed)
             started = time.perf_counter()
+            ticks = 0
             while self.acc >= DT and time.perf_counter() - started < FRAME_BUDGET:
                 self.acc -= DT
                 self.tick()
+                ticks += 1
+            # настоящая скорость - сколько жизни прожито за сколько времени на часах: если кадр
+            # не успевает, шаг физики не растёт (иначе ломаются касания), а скорость честно ниже
+            self.lived_acc += ticks * DT
+            self.wall_acc += dt
         if self.life is not None and self.life.playing:
             self.guitar_panel.neck.set_time(self.life.play_t)
         self.sync_sound()
         self.panel_clock += dt
         if self.panel_clock >= 0.5:
             self.panel_clock = 0.0
+            if self.wall_acc > 0:
+                self.real_speed = self.lived_acc / self.wall_acc
+            self.lived_acc = self.wall_acc = 0.0
             self.refresh_panel()
         self.window_.maybe_save_brain()
         self.view.update()
@@ -511,6 +531,11 @@ class ObservePage(Page):
             return
         self.world_name.setText(life.world.name)
         self.human_name.setText(f"человечек {life.body.name}")
+        want = self.effective_speed()
+        slow = (self.real_speed is not None and not self.paused and want > 1 and self.real_speed < 0.9 * want)
+        self.real_label.setVisible(slow)
+        if slow:
+            self.real_label.setText(f"x{want} (сейчас x{max(1, round(self.real_speed))}): кадр не успевает")
         v = self.values
         v["time"].setText(clock(life.time))
         v["distance"].setText(meters(life.distance))
@@ -518,11 +543,13 @@ class ObservePage(Page):
         v["jumps"].setText(str(life.jumps))
         v["falls"].setText(str(life.falls))
         self.spark.set_values(life.curiosity_log[-120:])
+        self.ring.update()
         b = life.brain
         self.learn_note.setText(f"Мозг учится на ходу: {b.steps:,} шагов обучения".replace(",", " "))
 
     def apply_theme(self, name):
         self.view.colors = theme.palette(name)
+        self.ring.colors = theme.palette(name)
         self.spark.set_theme(name)
 
 
@@ -948,9 +975,10 @@ class MainWindow(QMainWindow):
         self.settings_page = SettingsPage(self)
         self.teach_page = KeyboardPage(self)
         self.attempts_page = AttemptsPage(self)
-        self.pages = {"menu": self.menu, "observe": self.observe, "gallery": self.gallery_page,
-                      "attempts": self.attempts_page, "teach": self.teach_page, "stats": self.stats_page,
-                      "settings": self.settings_page}
+        self.catalog_page = CatalogPage(self)
+        self.pages = {"menu": self.menu, "observe": self.observe, "catalog": self.catalog_page,
+                      "gallery": self.gallery_page, "attempts": self.attempts_page, "teach": self.teach_page,
+                      "stats": self.stats_page, "settings": self.settings_page}
         for page in self.pages.values():
             self.stack.addWidget(page)
         self.apply_theme(self.settings.theme)
@@ -980,8 +1008,10 @@ class MainWindow(QMainWindow):
         self.observe.set_running(self.autostart and not in_menu)
         self.nav.setVisible(not in_menu)
         self.stack.setCurrentWidget(self.pages[name])
-        if not in_menu:
+        if not in_menu and name in self.tabs:
             self.tabs[name].setChecked(True)
+        elif name == "teach":
+            self.tabs["catalog"].setChecked(True)             # «Научить мелодии» - из «Каталога»
         self.observe.sync_sound()
         self.pages[name].on_show()
 

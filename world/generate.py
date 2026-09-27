@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from world import cppn, reach
+from world import cppn, macro, reach
 
 KINDS = ("tree", "bush", "stone", "flower", "mushroom", "crystal")
 DX = 0.25                     # шаг высот, м
@@ -148,17 +148,29 @@ def world_name(genome, seed):
     return name_from(cppn.global_outputs(genome, cppn.seed_vector(seed))[cppn.G_NAME])
 
 
-def generate(genome, seed, width):
+def generate(genome, seed, width, macro_genome=None):
     z = cppn.seed_vector(seed)
     g = cppn.global_outputs(genome, z)
     n = int(round(width / DX))
     xs = np.arange(n) * DX
-    out = cppn.terrain(genome, xs, width, z)
+    big = macro.applies(width)
+    if big:
+        # мир 640-1280 м: макро-сеть изгибает координату для сети рельефа (узор холмов не
+        # повторяется через 80 м), задаёт хребты и котловины и где холмы выше
+        warp, lift, scale = macro.outputs(macro_genome if macro_genome is not None else macro.default_genome(),
+                                          xs, width, z)
+        out = cppn.terrain(genome, xs + warp, width, z)
+    else:
+        out = cppn.terrain(genome, xs, width, z)
 
     amp = 1.2 + 3.3 * sig(g[cppn.G_AMP])
     # лёгкое сглаживание (полметра) - защита от зубцов, форму холмов задаёт сеть
     h = _smooth_ring(np.tanh(out[:, cppn.T_HEIGHT]), 2.0) * amp
     heights = np.clip(h - h.mean(), -6.0, 6.0)
+    hills = None
+    if big:
+        hills = heights * scale            # холмы от сети рельефа - для замера повтора
+        heights = hills + (lift - lift.mean())
     # защита от ям-ловушек: если откуда-то нельзя попасть во весь мир ни шагом, ни прыжком
     # (world/reach.py), рельеф той же формы делается ниже - на 15 % за раз. Сеть мира
     # отобрана так, что это редкость (2 мира из 60 на проверке), но закон - для всех миров.
@@ -210,4 +222,5 @@ def generate(genome, seed, width):
     world = World(seed, width, heights, tone, grass, palette, night, float(0.1 + 0.8 * sig(g[cppn.G_SUN])),
                   clouds_amount, far, mid, clouds, entities, name_from(g[cppn.G_NAME]))
     world.flattened = flattened
+    world.hills = None if hills is None else hills * 0.85 ** flattened
     return world

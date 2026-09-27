@@ -7,10 +7,11 @@ from game.storage import is_int, load_json, save_json
 THEMES = ("dark", "light")
 FREQS = ("rare", "normal", "often")
 FREQ_NAMES = {"rare": "Редко", "normal": "Обычно", "often": "Часто"}
-SPEEDS = (1, 2, 4, 8)
+SPEEDS = (1, 2, 4, 8, 16)
 SIZES = ("small", "medium", "large")
-SIZE_NAMES = {"small": "Маленький (80 м)", "medium": "Средний (160 м)", "large": "Большой (320 м)"}
-WORLD_WIDTH = {"small": 80.0, "medium": 160.0, "large": 320.0}
+SIZE_NAMES = {"small": "Маленький (80 м)", "medium": "Средний (160 м)", "large": "Большой (320 м)",
+              "huge": "Огромный (640 м)", "giant": "Бескрайний (1280 м)"}
+WORLD_WIDTH = {"small": 80.0, "medium": 160.0, "large": 320.0, "huge": 640.0, "giant": 1280.0}
 GUITAR_MODES = ("musician", "hands")
 GUITAR_MODE_NAMES = {"musician": "Музыкант", "hands": "Руками"}
 GUITAR_FREQS = ("rare", "sometimes", "often")
@@ -23,7 +24,7 @@ GUITAR_FAST_NAMES = {"slow": "Жизнь идёт в x1 - слышно кажд�
 @dataclass
 class Settings:
     phrase_freq: str = "normal"
-    speed: int = 1               # скорость: 1, 2, 4, 8 - последняя выбранная
+    speed: int = 1               # скорость: 1, 2, 4, 8, 16 - последняя выбранная
     show_thoughts: bool = True
     show_vision: bool = True     # «что видит»: лучи, интерес, намерение, сводка
     theme: str = "dark"

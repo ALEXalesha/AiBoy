@@ -1,4 +1,5 @@
 import json
+import time
 
 import pytest
 from PySide6.QtCore import Qt
@@ -312,3 +313,42 @@ def test_gallery_pictures_are_never_squeezed(qapp):
             assert (pic.width(), pic.height()) == app_module.GalleryPage.THUMB
     finally:
         w.close()
+
+
+def test_x16_lives_sixteen_times_faster_when_frames_keep_up(win):
+    win.show_page("observe")
+    obs = win.observe
+    assert 16 in obs.speed_buttons
+
+    def lived(speed):
+        obs.set_speed(speed)
+        t = obs.life.time
+        for _ in range(30):
+            obs.on_frame(1 / 60)
+        return obs.life.time - t
+    one, sixteen = lived(1), lived(16)
+    assert 15.0 * one <= sixteen <= 17.0 * one
+
+
+def test_when_a_frame_cannot_keep_up_the_step_stays_and_the_speed_shown_is_honest(win, monkeypatch):
+    from body.physics import DT
+    win.show_page("observe")
+    obs = win.observe
+    obs.set_speed(16)
+    life = obs.life
+    real_tick = obs.tick
+
+    def slow_tick():
+        t = time.perf_counter()
+        real_tick()
+        while time.perf_counter() - t < 0.003:      # шаг жизни - 3 мс: 16 шагов на кадр не влезут
+            pass
+    monkeypatch.setattr(obs, "tick", slow_tick)
+    t0 = life.time
+    k0 = life.k
+    for _ in range(60):
+        obs.on_frame(1 / 60)
+    lived = life.time - t0
+    assert lived == pytest.approx((life.k - k0) * DT)            # шаг физики тот же
+    assert lived < 16 * 1.0 * 0.7                                  # честно медленнее x16
+    assert obs.real_label.isVisible() and "x16 (сейчас x" in obs.real_label.text()

@@ -543,6 +543,25 @@ def draw_stump(p, f, human, pelvis):
     p.restore()
 
 
+def draw_chest(p, f, world, x):
+    """Сундук с игрушками: деревянный ящик с крышкой и оковкой."""
+    x = unwrap(x, f.cam_x, world.width)
+    if abs(x - f.cam_x) > f.half + 1:
+        return
+    g = world.height_at(x)
+    w, h = 0.7, 0.45
+    p.save()
+    p.setPen(QPen(qc((0.28, 0.17, 0.09)), max(1.0, 0.015 * f.ppm)))
+    p.setBrush(qc((0.55, 0.34, 0.16)))
+    p.drawRect(QRectF(QPointF(f.X(x - w / 2), f.Y(g + h)), QPointF(f.X(x + w / 2), f.Y(g))))
+    p.setBrush(qc((0.62, 0.40, 0.20)))
+    p.drawRect(QRectF(QPointF(f.X(x - w / 2 - 0.03), f.Y(g + h + 0.12)), QPointF(f.X(x + w / 2 + 0.03), f.Y(g + h))))
+    p.setPen(QPen(qc((0.78, 0.68, 0.30)), max(1.0, 0.03 * f.ppm)))
+    for u in (-0.22, 0.22):
+        p.drawLine(QPointF(f.X(x + u), f.Y(g + h + 0.12)), QPointF(f.X(x + u), f.Y(g)))
+    p.restore()
+
+
 def guitar_lying(p, f, world, x):
     x = unwrap(x, f.cam_x, world.width)
     if abs(x - f.cam_x) > f.half + 1:
@@ -620,7 +639,7 @@ def draw_thoughts(p, f, head, items, colors):
 # --- кадр целиком ---
 
 def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thoughts=None, guitar=None,
-               guitar_x=None):
+               guitar_x=None, chest_x=None):
     f = Frame(rect, cam_x, cam_y)
     p.save()
     p.setClipRect(rect)
@@ -636,6 +655,8 @@ def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thou
     p.fillRect(rect, haze)
     draw_ground(p, f, world, t)
     draw_entities(p, f, world, t, human.px if human else None)
+    if chest_x is not None:
+        draw_chest(p, f, world, chest_x)
     if guitar_x is not None:
         guitar_lying(p, f, world, guitar_x)
     if human is not None:
@@ -719,15 +740,76 @@ def draw_perception(p, f, per, human, colors):
     return box
 
 
+RING_MIN = 640.0          # мир шире - в миниатюре ещё и всё кольцо сжатым
+
+
+def ring_profile(p, rect, world, colors, marker=None, fill=None):
+    """Всё кольцо мира сжатым в полосу rect: линия рельефа, земля под ней; marker - где он."""
+    xs = np.linspace(0.0, world.width, max(2, int(rect.width())))
+    hs = world.heights_at(xs)
+    lo, hi = float(hs.min()), float(hs.max())
+    span = max(hi - lo, 1.0)
+    pts = [QPointF(rect.left() + i, rect.bottom() - 3 - (rect.height() - 6) * (h - lo) / span)
+           for i, h in enumerate(hs)]
+    poly = QPolygonF(pts + [QPointF(rect.right(), rect.bottom()), QPointF(rect.left(), rect.bottom())])
+    p.save()
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(fill or colors["surface2"]))
+    p.drawRect(rect)
+    p.setBrush(qc(world.palette["ground"]))
+    p.drawPolygon(poly)
+    if marker is not None:
+        mx = rect.left() + rect.width() * (marker % world.width) / world.width
+        p.setPen(QPen(QColor(colors["warm"]), 2))
+        p.drawLine(QPointF(mx, rect.top()), QPointF(mx, rect.bottom()))
+    p.restore()
+
+
 def thumbnail(world, body, width, height, colors, t=0.0):
-    """Картинка мира с человечком для галереи."""
+    """Картинка мира с человечком для галереи. Мир от 640 м в кадр не влезает: внизу -
+    всё кольцо сжатым, чтобы было видно хребты и котловины."""
     human = Human(body, world, x=world.width * 0.5)
     image = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(QColor(colors["surface"]))
     p = QPainter(image)
     draw_scene(p, QRectF(0, 0, width, height), world, human, human.px, human.py, t, colors)
+    if world.width >= RING_MIN:
+        strip = QRectF(0, height * 0.8, width, height * 0.2)
+        ring_profile(p, strip, world, colors, marker=human.px)
     p.end()
     return image
+
+
+class RingMap(QWidget):
+    """Мини-карта большого мира (от 640 м) на панели: всё кольцо, где он, сундук, гитара."""
+
+    def __init__(self, colors):
+        super().__init__()
+        self.colors = colors
+        self.life = None
+        self.setFixedHeight(44)
+
+    def set_life(self, life):
+        self.life = life
+        self.setVisible(life is not None and life.world.width >= RING_MIN)
+        self.update()
+
+    def paintEvent(self, event):
+        life = self.life
+        if life is None:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = QRectF(0, 0, self.width(), self.height())
+        ring_profile(p, rect, life.world, self.colors, marker=life.human.px, fill=self.colors["surface2"])
+        w = life.world.width
+        for x, color in ((getattr(life.inv, "chest_x", None), "text"), (life.guitar_x, "accent")):
+            if x is None:
+                continue
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(self.colors[color]))
+            p.drawEllipse(QPointF(rect.width() * (x % w) / w, 6), 3, 3)
+        p.end()
 
 
 class WorldView(QWidget):
@@ -777,11 +859,13 @@ class WorldView(QWidget):
         guitar = None
         if getattr(life, "has_guitar", False):
             guitar = "play" if life.playing and life.attempt is not None else "back"
-        lying = getattr(life, "guitar_x", None) if not getattr(life, "has_guitar", True) else None
+        lying = getattr(life, "guitar_x", None)
+        inv = getattr(life, "inv", None)
         if getattr(life, "playing", False):
             thoughts = None
         f = draw_scene(p, rect, life.world, life.human, self.cam_x, self.cam_y, self.clock, self.colors,
-                       speech=(life.last_phrase, life.speaking), thoughts=thoughts, guitar=guitar, guitar_x=lying)
+                       speech=(life.last_phrase, life.speaking), thoughts=thoughts, guitar=guitar, guitar_x=lying,
+                       chest_x=inv.chest_x if inv is not None else None)
         self.vision_rect = None
         if self.show_vision and not getattr(life, "playing", False):
             # раз в кадр, а не на каждый шаг жизни: на x8 это та же цена

@@ -30,7 +30,7 @@ from game.version import VERSION
 from game.view import WorldView, draw_scene, thumbnail
 from game.window_state import WindowMemory
 from game.ui import Page, button, card, label, meters, plural, segmented
-from game.audio import AudioOut
+from game.audio import SR, AudioOut
 from game.keyboard import KeyboardPage
 from game import guitar_store as gstore
 from game.guitar_panel import GuitarPanel
@@ -146,6 +146,7 @@ class ObservePage(Page):
         self.speed = s.speed
         self.paused = False
         self.acc = 0.0
+        self.sounding = None          # попытка, чей звук сейчас в канале гитары
         self.counted_time = 0.0
         self.counted_dist = 0.0
         self.curve_clock = 0.0
@@ -232,14 +233,14 @@ class ObservePage(Page):
     # --- миры ---
     def start(self, world_seed, body_seed, width=None, entry_id=None):
         w = self.window_
-        self.flush_life()
-        self.save_guitar()
+        self.stop_life()
         width = width or WORLD_WIDTH[w.settings.world_size]
         g = gstore.load(body_seed, w.songbook, mode=w.settings.guitar_mode)
         self.life = Life(w.models, world_seed, body_seed, width, w.brain, frequency=w.settings.phrase_freq,
                          guitarist=g, has_guitar=gstore.has_guitar(g), guitar_freq=w.settings.guitar_freq)
         self.show_guitar(False)
         self.counted_time = self.counted_dist = 0.0
+        self.acc = 0.0
         self.view.set_life(self.life)
         self.chat.clear_messages(f"{self.life.body.name} в мире {self.life.world.name}. Здесь появятся его фразы")
         if entry_id is None:
@@ -282,6 +283,53 @@ class ObservePage(Page):
         if seed is None:
             seed = self.fresh_seed(lambda s: generate_body(m.body_genome, s).name, "human")
         self.start(world, int(seed), width)
+
+    def stop_life(self):
+        """Единственная остановка жизни - при любой смене мира или человечка и при закрытии
+        окна: итоги в статистику и галерею, жизнь останавливается (идущая попытка брошена),
+        звук её попытки затухает за FADE, гриф пустеет, журнал и веса гитары - на диск.
+        Фоновой работы у жизни нет: кэш струн общий для всех жизней, он не останавливается."""
+        life = self.life
+        if life is None:
+            return
+        self.flush_life()
+        life.stop()
+        self.sync_sound()
+        self.guitar_panel.clear()
+        self.show_guitar(False)
+        self.save_guitar()
+        self.life = None
+
+    def sound_wanted(self):
+        """Попытка, которая должна звучать сейчас, или None: звук идёт за жизнью - пауза,
+        меню, x2-x8 «без звука», новый мир - тишина."""
+        life = self.life
+        if life is None or not life.playing or life.attempt is None or self.paused:
+            return None
+        if self.window_.current_page() == "menu" or self.effective_speed() != 1:
+            return None
+        return life.attempt
+
+    def sync_sound(self):
+        """Привести звук гитары к жизни: другая попытка (или никакой) - старая затухает, нужная
+        звучит с того места, где сейчас play_t."""
+        w = self.window_
+        want = self.sound_wanted()
+        if want is self.sounding:
+            return
+        if self.sounding is not None:
+            w.audio.stop("guitar")
+            self.sounding = None
+        if want is None:
+            return
+        life = self.life
+        audio = w.bank.render(want.notes(), want.duration)
+        start = int(life.play_t * SR) if life.play_t > 2 * DT else 0
+        label = f"попытка {life.guitarist.journal.next_id}"
+        if start:
+            label += f" с {life.play_t:.1f} с"
+        w.audio.play(audio[start:], label, channel="guitar", fade_in=start > 0)
+        self.sounding = want
 
     def save_guitar(self):
         life = self.life
@@ -338,11 +386,13 @@ class ObservePage(Page):
         self.paused = not self.paused
         self.view.paused = self.paused
         self.pause_button.setText("Продолжить" if self.paused else "Пауза")
+        self.sync_sound()
         self.view.update()
 
     def set_speed(self, k):
         self.speed = k
         self.speed_buttons[k].setChecked(True)
+        self.sync_sound()
 
     def on_frame(self, dt=None):
         """Кадр таймера: прожить столько шагов физики, сколько прошло времени * скорость."""
@@ -363,6 +413,7 @@ class ObservePage(Page):
                 self.tick()
         if self.life is not None and self.life.playing:
             self.guitar_panel.neck.set_time(self.life.play_t)
+        self.sync_sound()
         self.panel_clock += dt
         if self.panel_clock >= 0.5:
             self.panel_clock = 0.0
@@ -397,10 +448,8 @@ class ObservePage(Page):
             elif kind == "attempt_start":
                 attempt = data[0]
                 self.guitar_panel.set_attempt(attempt)
-                if self.effective_speed() == 1:
-                    # звук попытки - сразу целиком в микшер; струны из кэша, это миллисекунды
-                    w.audio.play(w.bank.render(attempt.notes(), attempt.duration),
-                                 f"попытка {life.guitarist.journal.next_id}")
+                # звук попытки - целиком в канал гитары; струны из кэша, это миллисекунды
+                self.sync_sound()
             elif kind == "attempt":
                 self.guitar_panel.set_result(data[0])
                 w.stats.add_attempt(data[0], life.guitarist.journal.best(data[0].get("tune")))
@@ -894,6 +943,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.pages[name])
         if not in_menu:
             self.tabs[name].setChecked(True)
+        self.observe.sync_sound()
         self.pages[name].on_show()
 
     def play(self):
@@ -929,6 +979,8 @@ class MainWindow(QMainWindow):
             self.observe.view.update()
         elif name == "speed":
             self.observe.set_speed(value)
+        elif name == "guitar_fast":
+            self.observe.sync_sound()
         elif name == "volume":
             self.audio.set_volume(value)
         elif name == "guitar_mode":
@@ -978,8 +1030,8 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.observe.set_running(False)
-        self.observe.flush_life()
-        self.observe.save_guitar()
+        self.observe.stop_life()
+        self.audio.close()
         self.save_brain()
         self.memory.save()
         self.settings.save(self.settings_path)

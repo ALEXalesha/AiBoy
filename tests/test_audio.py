@@ -72,3 +72,30 @@ def test_offscreen_default_opens_nothing(qapp):
     assert out.sink is None
     out.play(np.ones(10, np.float32), "silent")
     assert out.history == ["silent"]
+
+
+def test_device_is_never_fed_more_than_lead_ahead_and_stop_is_soft_and_per_channel(qapp):
+    import audio_fake
+    from game import audio
+    dev = audio_fake.Device()
+    out = AudioOut(60, opener=lambda: dev)
+    out.timer.stop()
+    tone = 0.3 * np.sin(2 * np.pi * 220 * np.arange(44100) / 44100).astype(np.float32)
+    out.play(tone, "гитара", channel="guitar")
+    for _ in range(10):
+        out.pump()
+        assert dev.queued() <= int(audio.LEAD * audio.SR)
+        dev.frame()
+    at = sum(len(p) for p in dev.played)
+    out.stop("guitar")
+    out.play(np.zeros(0, np.float32), "ничего")
+    for _ in range(20):
+        out.pump()
+        dev.frame()
+    seconds, jump, usual = audio_fake.tail_after(dev.stream(), at)
+    assert 0 < seconds <= audio.LEAD + audio.FADE + 0.001 and jump <= 1.5 * usual
+    # другой канал остановка гитары не трогает
+    out.play(np.full(1000, 0.1, np.float32), "клавиша")
+    out.play(tone, "гитара", channel="guitar")
+    out.stop("guitar")
+    assert out.playing("toys") and len(out.channels["guitar"]) == int(audio.FADE * audio.SR)

@@ -164,11 +164,13 @@ def test_brain_survives_closing_the_window(qapp):
     w = app_module.MainWindow(autostart=False)
     w.observe.advance(200)
     steps = w.brain.steps
+    world = w.observe.life.world_seed
     w.close()
+    assert w.observe.life is None                  # закрытие останавливает жизнь
     again = app_module.MainWindow(autostart=False)
     try:
         assert again.brain_from_user and again.brain.steps == steps
-        assert again.observe.life.world_seed == w.observe.life.world_seed
+        assert again.observe.life.world_seed == world
     finally:
         again.close()
 

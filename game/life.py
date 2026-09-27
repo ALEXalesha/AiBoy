@@ -82,6 +82,7 @@ class Life:
         self.last_entry = None
         self.guitar_time = 0.0
         self.music_flags = {}
+        self.stopped = False
 
     @property
     def distance(self):
@@ -104,7 +105,19 @@ class Life:
         self.since_phrase = 0.0
         return text
 
+    def stop(self):
+        """Жизнь окончена: новый мир, другой человечек, закрытие окна. Идущая попытка
+        бросается - без шага обучения и без записи в журнал (законченные уже в журнале и
+        сохраняются окном); дальше tick() не делает ничего."""
+        self.stopped = True
+        self.attempt = None
+        self.pending_rating = None
+        self.playing = False
+        self.music_flags = {}
+
     def tick(self):
+        if self.stopped:
+            return []
         if self.playing:
             return self._guitar_tick()
         events = []

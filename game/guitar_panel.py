@@ -185,6 +185,12 @@ class GuitarPanel(QWidget):
             self.title.setText(f"Учит «{attempt.tune}», фраза {attempt.phrase.index + 1}")
         self.neck.set_attempt(attempt)
 
+    def clear(self):
+        """Жизнь остановлена: пустой гриф, без названия и итога."""
+        self.title.setText("")
+        self.result.setText("")
+        self.neck.set_attempt(None)
+
     def set_result(self, entry):
         parts = []
         if entry.get("A") is not None:

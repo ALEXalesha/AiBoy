@@ -1,7 +1,9 @@
 """Музыкант живёт с человечком: веса сети и журнал попыток - в папке guitar/<зерно тела>
 в данных игры. Новый мир с тем же человечком - тот же музыкант, та же гитара за спиной.
 Битые файлы - новый музыкант со случайными весами и пустой журнал (так и задумано: у
-каждого человечка своя музыка с нуля)."""
+каждого человечка своя музыка с нуля). С 2.0 гитара в начале мира - в сундуке (toys/chest.py);
+отметка 1.1.0 «гитара за спиной» в журнале больше не читается - так спецификация 2.0
+переносит сохранения."""
 import os
 
 import numpy as np
@@ -45,11 +47,3 @@ def save(g):
     if g.reacher is not None:
         ok = skill_store.save(g.body_seed, "reach", g.reacher) and ok
     return ok
-
-
-def has_guitar(g):
-    return bool(g.journal.meta.get("has_guitar", False))
-
-
-def set_has_guitar(g, value):
-    g.journal.meta["has_guitar"] = bool(value)

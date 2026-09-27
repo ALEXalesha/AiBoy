@@ -19,7 +19,7 @@ FIELDS = (("hill_right", "hill_left", "pit_right", "pit_left", "flat")
           + ("entity", "entity_side", "entity_dist", "hue_cos", "hue_sin", "sat", "val",
              "want_dir", "want_jump", "curiosity", "grounded", "fell", "speed", "airborne",
              "night", "facing", "playing", "learning_tune", "got_it", "failing",
-             "stood_up", "asked_put", "agreed", "refused"))
+             "stood_up", "asked_put", "agreed", "refused", "offered"))
 STATE_DIM = len(FIELDS)
 IDX = {name: i for i, name in enumerate(FIELDS)}
 LOOK = 8.0            # м - холмы и ямы

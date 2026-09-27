@@ -155,6 +155,23 @@ QComboBox QAbstractItemView {{
     selection-background-color: {p['accent']};
     selection-color: {p['accent_text']};
 }}
+QProgressBar {{
+    background: {p['surface2']};
+    border: none;
+    border-radius: 5px;
+}}
+QProgressBar::chunk {{
+    background: {p['accent']};
+    border-radius: 5px;
+}}
+QLabel#badge {{
+    font-size: 12px;
+    font-weight: 600;
+    color: {p['bg']};
+    background: {p['warm']};
+    border-radius: 8px;
+    padding: 1px 8px;
+}}
 QSlider::groove:horizontal {{
     height: 6px;
     background: {p['surface2']};

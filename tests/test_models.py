@@ -66,7 +66,7 @@ def random_states(n, rng):
     s[:, IDX["playing"]] = playing
     for k in ("learning_tune", "got_it", "failing"):
         s[:, IDX[k]] = playing & (rng.random(n) < 0.4)
-    for k in ("stood_up", "asked_put", "agreed", "refused"):
+    for k in ("stood_up", "asked_put", "agreed", "refused", "offered"):
         s[:, IDX[k]] = rng.random(n) < 0.05
     return s
 

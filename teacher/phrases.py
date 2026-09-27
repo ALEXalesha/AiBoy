@@ -54,7 +54,10 @@ STOOD_UP = ("пойду погуляю", "хватит музыки", "пото�
 # «Положи гитару» - просьба владельца: согласился или нет
 AGREED = ("ладно, положу", "хорошо, положу гитару", "ладно, пойду погуляю", "хорошо")
 REFUSED = ("не хочу, я играю", "ещё немного поиграю", "дай доиграть", "потом положу")
-MUSIC = LEARNING + GOT_IT + FAILING + FREE + STOOD_UP + AGREED + REFUSED
+# «Предложить» игрушку из «Каталога»: взял или нет
+OFFER_YES = ("о, давай!", "давай поиграю", "хорошо, возьму", "ура, игрушка!")
+OFFER_NO = ("не сейчас", "не хочу сейчас", "потом", "мне и так интересно")
+MUSIC = LEARNING + GOT_IT + FAILING + FREE + STOOD_UP + AGREED + REFUSED + OFFER_YES + OFFER_NO
 
 
 def color_name(h, s, v):
@@ -92,6 +95,8 @@ def entity_phrases(kind, color, side, near):
 def topics(state):
     """[(вес, [фразы])] - что можно сказать в этом состоянии."""
     s = lambda name: float(state[IDX[name]])  # noqa: E731
+    if s("offered") > 0.5:
+        return [(5.0, list(OFFER_YES if s("agreed") > 0.5 else OFFER_NO))]
     if s("asked_put") > 0.5:
         # владелец попросил положить гитару - ответ
         if s("agreed") > 0.5:

@@ -127,9 +127,10 @@ def test_buttons_are_on_only_with_the_guitar_and_the_answer_goes_to_the_chat(qap
                 obs.tick()
         assert len(obs.life.phrases) > chat
         assert agree and not obs.life.has_guitar and not obs.guitar_panel.put.isEnabled()
-        # новый мир: гитара снова лежит рядом, как в начале
+        # новый мир: гитара снова в сундуке, а сундук - рядом с ним
         obs.new_world()
         life = obs.life
-        assert not life.has_guitar and life.guitar_x == pytest.approx(life.human.px + GUITAR_AHEAD * life.human.facing)
+        assert life.inv.where["guitar"] == "chest"
+        assert life.inv.chest_x == pytest.approx(life.human.px + GUITAR_AHEAD * life.human.facing)
     finally:
         w.close()

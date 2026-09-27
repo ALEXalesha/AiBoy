@@ -109,7 +109,7 @@ def test_guitar_journal_and_musician_survive_a_restart(qapp):
     again = app_module.MainWindow(autostart=False)
     try:
         life = again.observe.life
-        assert life.body_seed == seed and life.has_guitar
+        assert life.body_seed == seed and life.inv.where["guitar"] == "chest"   # новый запуск - в сундуке
         assert len(life.guitarist.journal.entries) == 1
         assert life.guitarist.musician.attempts == attempts
     finally:
@@ -133,18 +133,23 @@ def changed_pixels(a, b, step=2):
     return n
 
 
-def test_guitar_is_drawn_lying_on_his_back_and_in_his_hands(win):
+def test_guitar_and_chest_are_drawn_lying_on_his_back_and_in_his_hands(win):
     life = win.observe.life
     view = win.observe.view
     win.observe.advance(20)
-    far = life.guitar_x
-    life.guitar_x = life.human.px + life.world.width / 2      # за краем экрана
+    chest = life.inv.chest_x
+    life.inv.chest_x = life.human.px + life.world.width / 2    # сундук за краем экрана
     bare = view.grab().toImage()
-    life.guitar_x = life.human.px + 0.8
+    life.inv.chest_x = life.human.px - 1.2
+    with_chest = view.grab().toImage()
+    assert changed_pixels(bare, with_chest) > 20
+    life.inv.chest_x = life.human.px + life.world.width / 2
+    life.guitar_x = life.human.px + 0.8                         # положил рядом
     lying = view.grab().toImage()
     assert changed_pixels(bare, lying) > 20
-    life.guitar_x = far
+    life.inv.chest_x = chest
     life.has_guitar = True
+    life.inv.chest_x = life.human.px + life.world.width / 2
     back = view.grab().toImage()
     assert changed_pixels(bare, back) > 20
     bore(win)
@@ -152,7 +157,6 @@ def test_guitar_is_drawn_lying_on_his_back_and_in_his_hands(win):
     for _ in range(30):
         win.observe.tick()
     playing = view.grab().toImage()
-    life.has_guitar = False
     life.guitar_x = life.human.px + life.world.width / 2
     no_guitar = view.grab().toImage()
     assert changed_pixels(no_guitar, playing) > 20

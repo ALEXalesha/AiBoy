@@ -35,12 +35,23 @@ def first_choice_now(life):
     life.decide_clock = DECIDE_EVERY
 
 
-def test_guitar_lies_ahead_and_is_picked_up_when_he_passes(m, tmp_path):
-    life = make(m, tmp_path, has_guitar=False)
-    assert life.guitar_x == pytest.approx(life.human.px + GUITAR_AHEAD)
-    life.human.px = life.guitar_x - 0.3
-    events = life.tick()
-    assert ("pickup",) in events and life.has_guitar
+def test_the_guitar_waits_in_the_chest_and_he_fetches_it_when_he_wants_to_play(m, tmp_path):
+    life = make(m, tmp_path, has_guitar=False, choice=bored_mood())
+    assert life.inv.chest_x == pytest.approx(life.human.px + GUITAR_AHEAD * life.human.facing)
+    assert life.inv.where["guitar"] == "chest" and life.guitar_x is None
+    life.human.px = life.inv.chest_x + 0.3                 # проходит мимо - не берёт
+    for e in life.tick():
+        assert e != ("pickup",)
+    first_choice_now(life)
+    life.tick()
+    assert life.seeking is not None and life.walk.pulls.get("гитара") == 1.0
+    assert life.walk.places.marks["гитара"] == pytest.approx(life.inv.chest_x)
+    events = []
+    for _ in range(60 * 60):
+        events += life.tick()
+        if life.playing:
+            break
+    assert ("pickup",) in events and ("sit",) in events and life.has_guitar
 
 
 def test_bored_of_the_world_he_sits_down_and_plays(m, tmp_path):

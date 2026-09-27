@@ -16,6 +16,7 @@ import math
 import numpy as np
 
 from acts.explore.navigator import LOOK_TIME, Walk
+from toys.chest import CHEST_AHEAD, REACH, Inventory
 from body import skeleton
 from body.cppn import generate_body
 from body.physics import DT, Human
@@ -35,12 +36,14 @@ TEMPERATURE = 0.75
 LOG_EVERY = 0.5            # с - точка графика любопытства
 INTENT_K = 1.0 - math.exp(-DT / 1.0)   # намерение усредняется за секунду
 STAND = tuple(skeleton.rest_angles())  # стоит и осматривается
-GUITAR_AHEAD = 1.5         # м - где лежит гитара от места появления
-PICKUP = 0.8               # м - подбирает, проходя ближе
+GUITAR_AHEAD = CHEST_AHEAD  # м - где сундук (и в нём гитара) от места появления
+PICKUP = REACH             # м - ближе - дотянулся до сундука или гитары на земле
 ATTEMPT_PAUSE = 0.8        # с тишины между попытками
 SIT_TIME = 1.0             # с - садится и берёт гитару, прежде чем заиграть
 PUT_T = 0.1                # «положить или взять с собой» - температура решения
 ASK_T = 0.1                # «положи гитару» - температура согласия
+OFFER_BONUS = 0.15         # прибавка к тяге игрушки, которую ему предложили
+OFFER_NEAR = 0.6           # м - предложенную кладут рядом, до неё дотянуться
 SEEK_MAX = 90.0            # с - столько идёт к положенной гитаре, потом решает заново
 
 
@@ -79,8 +82,10 @@ class Life:
         self.last_phrase = ""
         self._log_clock = 0.0
         self.guitarist = guitarist
-        self.has_guitar = has_guitar
-        self.guitar_x = self.human.px + GUITAR_AHEAD * self.human.facing
+        self.inv = Inventory(self.human.px + CHEST_AHEAD * self.human.facing, self.world.width,
+                             toys=["guitar"] if guitarist is not None else [])
+        if has_guitar:
+            self.inv.where["guitar"] = "carried"
         if navigator is None:
             from game.models import starter_navigator
             navigator = starter_navigator()
@@ -98,8 +103,34 @@ class Life:
         self.guitar_time = 0.0
         self.music_flags = {}
         self.stopped = False
-        self.guitar_laid = False    # сам положил гитару (а не лежит с начала мира)
-        self.seeking = None        # с какого времени идёт к положенной гитаре
+        self.seeking = None        # с какого времени идёт за гитарой (к сундуку или где положил)
+        self.walk.places.marks["сундук"] = self.inv.chest_x
+
+    # где гитара: у него, в сундуке или на земле (toys/chest.py)
+    @property
+    def has_guitar(self):
+        return self.inv.where.get("guitar") == "carried"
+
+    @has_guitar.setter
+    def has_guitar(self, value):
+        if value:
+            self.inv.where["guitar"] = "carried"
+        elif self.has_guitar:
+            self.inv.stow("guitar")
+
+    @property
+    def guitar_laid(self):
+        return isinstance(self.inv.where.get("guitar"), float)
+
+    @property
+    def guitar_x(self):
+        """Где лежит гитара на земле, или None."""
+        w = self.inv.where.get("guitar")
+        return w if isinstance(w, float) else None
+
+    @guitar_x.setter
+    def guitar_x(self, x):
+        self.inv.where["guitar"] = float(x)
 
     @property
     def distance(self):
@@ -205,26 +236,23 @@ class Life:
     # --- гитара ---
     def available(self):
         acts = ["explore"]
-        if self.guitarist is not None and (self.has_guitar or self.guitar_laid):
+        if self.guitarist is not None and "guitar" in self.inv.where:
             acts.append("guitar")
         return acts
 
     def _world_guitar(self, events):
         self.choice.world_interest(self.brain.err_ema, DT)
         self.decide_clock += DT
-        if not self.has_guitar:
-            w = self.world.width
-            dx = (self.guitar_x - self.human.px + w / 2) % w - w / 2
-            # гитару с начала мира подбирает, проходя; ту, что положил сам, - когда пришёл играть
-            if abs(dx) < PICKUP and (not self.guitar_laid or self.seeking is not None):
-                came_to_play = self.seeking is not None
+        if self.seeking is not None and not self.has_guitar:
+            # идёт за гитарой: берёт, когда дотянулся (из сундука или с земли), и садится играть
+            if self.inv.take("guitar", self.human.px):
                 self.pick_guitar()
                 events.append(("pickup",))
-                if came_to_play and self.human.grounded and self.human.fallen <= 0:
+                if self.human.grounded and self.human.fallen <= 0:
                     self.sit_down()
                     events.append(("sit",))
                 return
-            if self.seeking is not None and self.time - self.seeking > SEEK_MAX:
+            if self.time - self.seeking > SEEK_MAX:
                 self.seeking = None                 # не дошёл - решит заново
                 self.walk.pulls.pop("гитара", None)
         if (self.guitarist is not None and self.seeking is None and self.decide_clock >= DECIDE_EVERY
@@ -235,26 +263,54 @@ class Life:
                     self.sit_down()
                     events.append(("sit",))
                 else:
-                    # гитара лежит, где он её положил: он идёт к ней (куда - решает навигатор
-                    # по памяти мест, метка «гитара» тянет), играть - когда дойдёт
+                    # гитара в сундуке или лежит, где он её положил: он идёт к ней (куда - решает
+                    # навигатор по памяти мест, метка «гитара» тянет), играть - когда дойдёт
                     self.choice.switch("explore")
                     self.seeking = self.time
+                    self.walk.places.marks["гитара"] = self.inv.position("guitar")
                     self.walk.pulls["гитара"] = 1.0
 
     def pick_guitar(self):
-        self.has_guitar = True
-        self.guitar_laid = False
+        self.inv.where["guitar"] = "carried"
         self.seeking = None
         self.walk.pulls.pop("гитара", None)
         self.walk.places.marks.pop("гитара", None)
 
     def put_guitar(self):
         """Кладёт гитару на землю, где стоит; место - в памяти мест."""
-        self.has_guitar = False
-        self.guitar_laid = True
-        self.guitar_x = self.human.px
-        self.walk.places.marks["гитара"] = self.guitar_x
+        self.inv.put("guitar", self.human.px)
+        self.walk.places.marks["гитара"] = self.human.px
         self.walk.pulls.pop("гитара", None)
+
+    def offer(self, name):
+        """«Предложить» из «Каталога»: игрушку кладут рядом с ним. Возьмёт ли - тот же выбор
+        занятий с прибавкой OFFER_BONUS; не взял - она лежит рядом (и в памяти мест).
+        Возвращает (взял, события) или None, если предложить нечего."""
+        if self.stopped or self.playing or name not in self.inv.where or self.inv.where[name] == "carried":
+            return None
+        held = self.inv.carried
+        if held == "guitar":
+            self.put_guitar()                    # руки заняты: своё кладёт рядом
+        elif held is not None:
+            self.inv.put(held, self.human.px)
+        x = self.human.px + OFFER_NEAR * self.human.facing
+        self.inv.where[name] = float(x)
+        self.walk.places.marks["гитара" if name == "guitar" else name] = x
+        c = self.choice
+        probs = c.probabilities(["explore", name], {name: OFFER_BONUS})
+        took = self.rng.random() < probs[name]
+        events = []
+        if took:
+            self.inv.take(name, self.human.px)
+            if name == "guitar":
+                self.pick_guitar()
+                events.append(("pickup",))
+                self.sit_down()
+                events.append(("sit",))
+        self.music_flags = {"offered": 1.0, "agreed": 1.0 if took else 0.0}
+        events.append(("phrase", self.say()))
+        self.music_flags = {"playing": 1.0} if self.playing else {}
+        return took, events
 
     def wants_to_leave_it(self):
         """Вставая: положить гитару здесь или взять с собой. Нравится играть - берёт с собой (скоро

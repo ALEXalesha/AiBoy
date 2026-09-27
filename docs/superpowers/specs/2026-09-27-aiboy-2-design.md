@@ -228,7 +228,11 @@ gives or what it finds, and sits or lies down, sometimes next to him.
 - he decides how fast to approach, at what distance to stop, and when to offer food from
   the backpack (a separate dog treat supply, refilled at the chest);
 - the success is the dog's trust;
-- once trust passes a threshold the dog is tamed: it follows him, rests near him and plays.
+- once trust passes a threshold the dog is tamed. A tamed dog still has its own will: it
+  decides itself whether to follow him, lie down or go sniff around. Its behaviour network has
+  its own liking and boredom per activity (follow, fetch, swim, rest, explore), so it may
+  get bored of fetching and walk off, or come back later and bring the ball on its own.
+  Trust does not drop from its boredom.
 
 **Play with the same ball:**
 - he throws or kicks the ball; the dog chases it and brings it back;
@@ -297,7 +301,12 @@ networks; the mood only sets their spawn rates within the settings.
 
 **Scoring and choosing:**
 - **Liking** per activity: a slow average of P (α = 0.05), in the save.
-- **Boredom** grows while he does an activity and fades while he does not.
+- **Boredom** grows while he does an activity and fades while he does not. It is the same
+  for every activity: the guitar, each toy, swimming, playing with the dog. The longer he
+  does one thing in a row, the more it tires him (half of its pull is gone in 3-5 minutes
+  of game time), and a result that stays flat for many attempts is boring too. The
+  «Как часто» setting changes how fast boredom grows. It is not a timer: he stops only when
+  another activity or the world becomes more interesting.
 - **Score** = liking − boredom + need urgency. Urgency is zero for play and grows with
   hunger, thirst or tiredness for eat, drink and rest.
 - **Choice:** softmax(score / T) with hysteresis. The 1.1.0 "world or guitar" rule
@@ -387,6 +396,9 @@ above the first 20 by a margin. N and the margin are measured in the plan.
 - nobody catches a bird.
 
 **Choice:**
+- no activity lasts forever: on 5 people over 30 minutes at x8 every session of every toy
+  and of the dog ends by itself (median 2-6 minutes of game time, none over 12);
+- the dog sometimes stops fetching or following by itself and later comes back;
 - a toy with constant 👍 becomes the favourite;
 - a boring activity is dropped;
 - no rod or swimming without water;

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from body.cppn import generate_body
-from brain.reach import Reacher
+from skills.reach import Reacher
 from game import models
 from music import hands
 from music.journal import Journal

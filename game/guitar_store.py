@@ -7,7 +7,8 @@ import os
 import numpy as np
 
 import paths
-from brain.reach import Reacher
+from skills import store as skill_store
+from skills.reach import Reacher
 from music.journal import Journal
 from music.musician import Musician
 from music.session import Guitarist
@@ -26,11 +27,8 @@ def load(body_seed, book, mode="musician"):
         musician.load(os.path.join(base, "musician.npz"))
     except Exception:  # noqa: BLE001 - нет файла или битый: музыкант с нуля
         musician = Musician(seed=int(body_seed) % (2 ** 31))
-    reacher = Reacher(seed=int(body_seed) % (2 ** 31))
-    try:
-        reacher.load(os.path.join(base, "hands.npz"))
-    except Exception:  # noqa: BLE001
-        reacher = Reacher(seed=int(body_seed) % (2 ** 31))
+    # руки - навык тела (skills/<зерно>/reach.npz; руки 1.1.0 из hands.npz читаются тоже)
+    reacher = skill_store.load(body_seed, "reach", lambda: Reacher(seed=int(body_seed) % (2 ** 31)))
     g = Guitarist(musician, journal, book, mode=mode, reacher=reacher,
                   rng=np.random.default_rng([int(body_seed) & 0xFFFFFFFF, 11]))
     g.body_seed = int(body_seed)
@@ -42,10 +40,10 @@ def save(g):
     ok = g.journal.save()
     try:
         g.musician.save(os.path.join(base, "musician.npz"))
-        if g.reacher is not None:
-            g.reacher.save(os.path.join(base, "hands.npz"))
     except OSError:
         return False
+    if g.reacher is not None:
+        ok = skill_store.save(g.body_seed, "reach", g.reacher) and ok
     return ok
 
 

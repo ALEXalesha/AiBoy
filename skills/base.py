@@ -121,6 +121,27 @@ class GaussianSkill:
         self.attempts += 1
         return adv
 
+    def learn_many(self, records, reward):
+        """Череда решений одной попытки (поездка, башня) и одна награда на всех: база и разброс
+        сдвигаются один раз, а не на каждое решение (иначе к десятому решению преимущество уже
+        ноль - замер: велосипед находил езду и терял её)."""
+        if not records:
+            return 0.0
+        sd = np.sqrt(self.spread) + 1e-6
+        dev = float(np.clip(reward - self.baseline, -5 * sd, 5 * sd))
+        adv = dev / sd
+        self.baseline += self.k * dev
+        self.spread += self.k * (dev * dev - self.spread)
+        X = np.stack([r[0] for r in records])
+        U = np.stack([r[1] for r in records])
+        mu = np.tanh(self.net.forward(X))
+        dmu = -adv * (U - mu) / (self.sigma * self.sigma) / len(records)
+        self.net.backward((dmu * (1.0 - mu * mu)).astype(np.float32))
+        clip_grads(self.net.params(), 1.0)
+        self.opt.step()
+        self.attempts += 1
+        return adv
+
     def nets(self):
         return {"net": self.net}
 

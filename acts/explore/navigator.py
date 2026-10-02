@@ -142,13 +142,16 @@ class Walk:
             # кольцо, другой дорогой тоже дойдёт
             right = self.places.distance(x, self.goal, 1)
             left = self.places.width - right
-            d = min(right, left)
+            way = self.goal_way or (1 if right <= left else -1)
+            # продвижение - по той дороге, которой идёт: в обход кратчайшее расстояние сначала
+            # растёт (замер: через 8 с обход считался «застрял», и он ходил туда-сюда 70 с)
+            d = right if way > 0 else left
             if self.goal_best is None or d < self.goal_best[0] - 1.0:
                 self.goal_best = (d, t)
             elif t - self.goal_best[1] > STUCK:
-                self.goal_way = -(self.goal_way or (1 if right <= left else -1))
+                self.goal_way = -way
                 self.goal_best = (1e9, t)            # заново, по новой дороге
-            way = self.goal_way or (1 if right <= left else -1)
+                way = self.goal_way
             self.want = way
             self.look_left = 0.0
             self.prev = None

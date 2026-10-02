@@ -67,8 +67,13 @@ def toy_path(body_seed, name):
 def load_toys(body_seed):
     """Головы игрушек человечка: {игрушка: головы}; нет или битые - с нуля (появятся при игре)."""
     out = {}
+    from toys import registry
     from toys.ball import BallHeads
-    for name, make in (("ball", lambda: BallHeads(seed=int(body_seed) % (2 ** 31))),):
+    makers = [("ball", lambda: BallHeads(seed=int(body_seed) % (2 ** 31)))]
+    for name in registry.INPLACE:
+        heads_cls = registry.inplace(name)[0]
+        makers.append((name, lambda c=heads_cls: c(seed=int(body_seed) % (2 ** 31))))
+    for name, make in makers:
         p = toy_path(body_seed, name)
         if os.path.exists(p):
             try:

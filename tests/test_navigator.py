@@ -82,3 +82,21 @@ def test_in_a_new_world_he_mostly_walks_on(world):
     рассмотреть то, что только что прошёл (так и задумано), но не чаще раза в полминуты."""
     r = probe.wander(models.load(), models.starter_brain(), world, 320, minutes=1.5)
     assert r["first_lap_forward"] >= 0.75 and r["first_lap_turns"] <= 3, r
+
+
+def test_a_detour_that_makes_progress_is_kept():
+    """Застрял по дороге к цели - идёт в обход и не бросает обход, пока продвигается по нему
+    (замер: обход через 8 с считался «застрял» по кратчайшему расстоянию, он ходил туда-сюда
+    70 с у холма и пил на 100 с позже)."""
+    w = Walk(160, 1, Navigator(seed=0), np.random.default_rng(0))
+    w.goal = 30.0
+    x, t = 150.0, 0.0
+    for _ in range(int((navmod.STUCK + 1) * 10)):       # стоит у стены: ни на метр ближе
+        w.tick(t, 0.1, x, 1, 1.0, can_decide=True)
+        t += 0.1
+    assert w.want == -1                                  # пошёл в обход
+    for _ in range(300):                                 # 30 с идёт в обход по 1 м/с
+        x -= 0.1
+        w.tick(t, 0.1, x, -1, 1.0, can_decide=True)
+        t += 0.1
+        assert w.want == -1

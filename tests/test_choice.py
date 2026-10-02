@@ -57,10 +57,15 @@ def test_no_switch_before_three_attempts_or_twenty_seconds_unless_a_need_is_urge
 
 def test_often_is_longer_and_stronger_than_rare():
     rare, often = Choice("rare"), Choice("often")
-    assert often.acts["guitar"].half > rare.acts["guitar"].half
-    assert often.acts["guitar"].pull() > rare.acts["guitar"].pull()
+    for c in (rare, often):
+        c.add("ball", 5.0)
+    for n in ("guitar", "ball", "swim"):
+        assert often.acts[n].half > rare.acts[n].half          # «Как часто» - всем играм
+        assert often.acts[n].pull() > rare.acts[n].pull()
+    assert rare.acts["explore"].half == often.acts["explore"].half
+    assert rare.acts["guitar"].half == 3.5 and often.acts["guitar"].half == 7.0   # как в 1.1.0
     rare.freq = "often"
-    assert rare.acts["guitar"].half == often.acts["guitar"].half
+    assert rare.acts["guitar"].half == often.acts["guitar"].half and rare.acts["ball"].half == often.acts["ball"].half
 
 
 def test_pleasure_counts_success_growth_and_the_owner():
@@ -78,9 +83,13 @@ def test_state_survives_as_dict_and_broken_values_are_ignored():
     assert e.acts["guitar"].liking == 0.5 and e.mood == 0.0
 
 
+GUITAR_ONLY = ("guitar",)   # законы сеансов гитары - гитара одна в сундуке (у игрушек свои законы,
+                            # общий - все сеансы всех игр кончаются сами - в test_all_sessions.py)
+
+
 @pytest.fixture(scope="module")
 def sometimes():
-    return [sessions(b, 30, "sometimes") for b in BODIES]
+    return [sessions(b, 30, "sometimes", chest=GUITAR_ONLY) for b in BODIES]
 
 
 def test_every_guitar_session_ends_by_itself_in_reasonable_time(sometimes):
@@ -102,8 +111,8 @@ def test_after_a_session_he_walks_and_later_plays_again(sometimes):
 
 
 def test_often_means_longer_and_more_play_than_rare():
-    rare = [sessions(b, 30, "rare")[0] for b in BODIES[:3]]
-    often = [sessions(b, 30, "often")[0] for b in BODIES[:3]]
+    rare = [sessions(b, 30, "rare", chest=GUITAR_ONLY)[0] for b in BODIES[:3]]
+    often = [sessions(b, 30, "often", chest=GUITAR_ONLY)[0] for b in BODIES[:3]]
     total = lambda runs: sum(s["length"] for out in runs for s in out)  # noqa: E731
     med = lambda runs: float(np.median([s["length"] for out in runs for s in out]))  # noqa: E731
     assert total(often) > total(rare) * 1.2 and med(often) > med(rare)

@@ -678,6 +678,81 @@ def draw_toys(p, f, world, items):
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QColor(255, 255, 255, 120))
             p.drawEllipse(QPointF(c.x() - r * f.ppm * 0.35, c.y() - r * f.ppm * 0.35), r * f.ppm * 0.3, r * f.ppm * 0.3)
+        elif kind == "box":
+            w, h, ang = r
+            p.translate(QPointF(f.X(x), f.Y(y)))
+            p.rotate(-math.degrees(ang))
+            p.setPen(QPen(qc(darker(color, 0.35)), max(1.0, 0.01 * f.ppm)))
+            p.setBrush(qc(color))
+            p.drawRect(QRectF(-w / 2 * f.ppm, -h / 2 * f.ppm, w * f.ppm, h * f.ppm))
+        elif kind == "bubble":
+            c = QPointF(f.X(x), f.Y(y))
+            p.setPen(QPen(QColor(255, 255, 255, 180), max(1.0, 0.012 * f.ppm)))
+            g = QRadialGradient(c, r * f.ppm)
+            g.setColorAt(0.0, QColor(255, 255, 255, 10))
+            g.setColorAt(0.8, QColor(170, 210, 255, 50))
+            g.setColorAt(1.0, QColor(255, 200, 240, 120))
+            p.setBrush(g)
+            p.drawEllipse(c, r * f.ppm, r * f.ppm)
+        elif kind == "plane":
+            p.translate(QPointF(f.X(x), f.Y(y)))
+            p.rotate(-math.degrees(r))
+            s = 0.25 * f.ppm
+            p.setPen(QPen(QColor(120, 120, 120), 1))
+            p.setBrush(qc(color))
+            p.drawPolygon(QPolygonF([QPointF(s, 0), QPointF(-s, -0.25 * s), QPointF(-0.7 * s, 0), QPointF(-s, 0.2 * s)]))
+        elif kind == "boomerang":
+            p.translate(QPointF(f.X(x), f.Y(y)))
+            p.rotate(math.degrees(r))
+            s = 0.2 * f.ppm
+            pen = QPen(qc(color), max(2.0, 0.05 * f.ppm))
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            p.setPen(pen)
+            p.drawPolyline(QPolygonF([QPointF(-s, s * 0.4), QPointF(0, 0), QPointF(s, s * 0.4)]))
+        elif kind == "bobber":
+            c = QPointF(f.X(x), f.Y(y))
+            p.setPen(QPen(QColor(40, 40, 40), 1))
+            p.setBrush(qc(color))
+            p.drawEllipse(c, r * f.ppm, r * f.ppm * 1.4)
+        elif kind == "line":
+            x2, y2 = r, color
+            x2 = unwrap(x2, f.cam_x, world.width)
+            p.setPen(QPen(QColor(230, 230, 230, 160), 1))
+            p.drawLine(QPointF(f.X(x), f.Y(y)), QPointF(f.X(x2), f.Y(y2)))
+        elif kind == "bike":
+            rx, ry, fx, fy, spin, ang = r
+            rx, fx = unwrap(rx, f.cam_x, world.width), unwrap(fx, f.cam_x, world.width)
+            wr = 0.3 * f.ppm
+            pen = QPen(qc(color), max(2.0, 0.04 * f.ppm))
+            p.setPen(QPen(QColor(30, 30, 30), max(2.0, 0.03 * f.ppm)))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            for cx, cy in ((rx, ry), (fx, fy)):
+                c = QPointF(f.X(cx), f.Y(cy))
+                p.drawEllipse(c, wr, wr)
+                p.drawLine(c, QPointF(c.x() + wr * math.cos(spin), c.y() + wr * math.sin(spin)))
+            p.setPen(pen)
+            sx, sy = (rx + fx) / 2, (ry + fy) / 2 + 0.45
+            p.drawPolyline(QPolygonF([QPointF(f.X(rx), f.Y(ry)), QPointF(f.X(sx), f.Y(sy)),
+                                      QPointF(f.X(fx), f.Y(fy)), QPointF(f.X(fx - 0.1 * (fx - rx)), f.Y(sy + 0.15))]))
+        elif kind == "drawing":
+            pts, pens, facing = r
+            if len(pts) >= 2:
+                xs = [x + facing * q[0] for q in pts]
+                ys = [y + q[1] for q in pts]
+                pad = 0.08
+                p.setPen(QPen(QColor(150, 140, 120), 1))
+                p.setBrush(QColor(250, 248, 240, 235))          # лист бумаги
+                p.drawRect(QRectF(QPointF(f.X(min(xs) - pad), f.Y(max(ys) + pad)),
+                                  QPointF(f.X(max(xs) + pad), f.Y(min(ys) - pad))))
+                pen = QPen(qc(color), max(1.5, 0.02 * f.ppm))
+                pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                p.setPen(pen)
+                for k in range(len(pts) - 1):
+                    if k < len(pens) and pens[k]:
+                        continue
+                    a, b = pts[k], pts[k + 1]
+                    p.drawLine(QPointF(f.X(x + facing * a[0]), f.Y(y + a[1])),
+                               QPointF(f.X(x + facing * b[0]), f.Y(y + b[1])))
         elif kind == "target":
             base = QPointF(f.X(x), f.Y(y))
             top = QPointF(f.X(x), f.Y(y + 0.7))
@@ -945,8 +1020,8 @@ class WorldView(QWidget):
             guitar = "play" if life.playing and life.attempt is not None else "back"
         lying = getattr(life, "guitar_x", None)
         inv = getattr(life, "inv", None)
-        if getattr(life, "playing", False):
-            thoughts = None
+        if getattr(life, "playing", False) or getattr(life, "toy", None) is not None:
+            thoughts = None                     # играет - желаний «куда идти» нет
         f = draw_scene(p, rect, life.world, life.human, self.cam_x, self.cam_y, self.clock, self.colors,
                        speech=(life.last_phrase, life.speaking), thoughts=thoughts, guitar=guitar, guitar_x=lying,
                        chest_x=inv.chest_x if inv is not None else None, water=getattr(life, "water", None),

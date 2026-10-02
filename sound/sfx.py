@@ -89,7 +89,22 @@ def pop(force=1.0, size=0.05, seed=6):
     return (0.4 * force * x).astype(np.float32)
 
 
-SOUNDS = {"kick": thump, "throw": whoosh, "bounce": bounce, "catch": slap, "land": thump, "clack": clack,
+def scratch(force=1.0, size=0.05, seed=7):
+    """Фломастер по бумаге: короткий светлый шорох."""
+    n = int(0.12 * SR)
+    t = np.arange(n) / n
+    x = _lowpass(_noise(n, seed), 0.7) * np.sin(np.pi * t)
+    return (0.15 * force * x).astype(np.float32)
+
+
+def chain(force=1.0, size=0.1, seed=8):
+    """Цепь велосипеда: тихий тик."""
+    n = int(0.04 * SR)
+    x = _tone(2400, n, 0.004) + 0.3 * _noise(n, seed) * _env(n, attack=0.0002, decay=0.002)
+    return (0.2 * force * x).astype(np.float32)
+
+
+SOUNDS = {"scratch": scratch, "chain": chain, "kick": thump, "throw": whoosh, "bounce": bounce, "catch": slap, "land": thump, "clack": clack,
           "fall": thump, "splash": splash, "whoosh": whoosh, "pop": pop}
 
 

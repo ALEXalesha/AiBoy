@@ -29,13 +29,15 @@ from music.songbook import Songbook  # noqa: E402
 BODIES = (7, 21, 34, 55, 89)
 
 
-def sessions(body_seed, minutes, freq="sometimes", world_seed=None, width=160, log=None):
+def sessions(body_seed, minutes, freq="sometimes", world_seed=None, width=160, log=None, chest=None):
+    """chest - какие игрушки в сундуке (None - все; законы сеансов гитары - одна гитара: с 2.0
+    в сундуке ещё 8 игрушек, и гитаре за полчаса достаётся один сеанс или ни одного)."""
     d = tempfile.mkdtemp(prefix="aiboy-sessions-")
     g = Guitarist(Musician(seed=body_seed), Journal(os.path.join(d, "j.json")), Songbook(os.path.join(d, "s.json")),
                   rng=np.random.default_rng(body_seed))
     m = models.load()
     life = Life(m, world_seed or 1000 + body_seed, body_seed, width, models.starter_brain(), guitarist=g,
-                has_guitar=True, guitar_freq=freq)
+                has_guitar=True, guitar_freq=freq, chest=chest)
     out, cur, trace, phrases = [], None, [], []
     life.laid = []             # (время, где положил, где потом взял или None)
     for i in range(int(minutes * 3600)):

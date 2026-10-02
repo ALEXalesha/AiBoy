@@ -51,9 +51,11 @@ def urgent_pull():
 
 
 class Activity:
-    def __init__(self, name, half_min, liking=0.5, bias=0.0, attempts=True, need=False):
+    def __init__(self, name, half_min, liking=0.5, bias=0.0, attempts=True, need=False, play=False):
         self.name = name
         self.half = half_min
+        self.base_half = half_min    # без «Как часто»
+        self.play = play             # игра (гитара, игрушка, плавать, собака): «Как часто» её касается
         self.liking = liking
         self.boredom = 0.0
         self.bias = bias
@@ -81,7 +83,7 @@ class Choice:
         self.since = 0.0             # с в текущем
         self.mood = 0.0              # -1..1
         self.freq = freq
-        self.add("guitar", HALF[freq], bias=BIAS[freq])
+        self.add("guitar", HALF["sometimes"])
         for n in NEEDS:
             self.acts[n] = Activity(n, 60.0, liking=0.0, need=True)
         self.add("swim", 5.0, liking=0.45)
@@ -92,14 +94,21 @@ class Choice:
 
     @freq.setter
     def freq(self, value):
+        """«Как часто» - всем играм (спецификация 2.0, раздел 10): как быстро надоедает (половина
+        тяги - за base_half x HALF/HALF[sometimes]) и сдвиг тяги. У гитары base_half 5 - те же
+        3.5 / 5 / 7 минут, что в 1.1.0."""
         self._freq = value if value in HALF else "sometimes"
-        g = getattr(self, "acts", {}).get("guitar")
-        if g is not None:
-            g.half, g.bias = HALF[self._freq], BIAS[self._freq]
+        for a in getattr(self, "acts", {}).values():
+            if a.play:
+                a.half = a.base_half * HALF[self._freq] / HALF["sometimes"]
+                a.bias = BIAS[self._freq]
 
-    def add(self, name, half_min, liking=0.5, bias=0.0):
+    def add(self, name, half_min, liking=0.5, bias=None):
         if name not in self.acts:
-            self.acts[name] = Activity(name, half_min, liking, bias)
+            a = Activity(name, half_min, liking, 0.0, play=True)
+            self.acts[name] = a
+            a.half = half_min * HALF[self.freq] / HALF["sometimes"]
+            a.bias = BIAS[self.freq] if bias is None else bias
         return self.acts[name]
 
     # --- время и удовольствие ---

@@ -61,7 +61,7 @@ SEEK_MAX = 90.0            # с - столько идёт к положенно�
 class Life:
     def __init__(self, models, world_seed, body_seed, width, brain, frequency="normal", seed=None,
                  guitarist=None, has_guitar=False, guitar_freq="sometimes", choice=None, navigator=None,
-                 needs=None, backpack=None, food_prefs=None, swimmer=None, toy_heads=None):
+                 needs=None, backpack=None, food_prefs=None, swimmer=None, toy_heads=None, chest=None):
         self.models = models
         self.world_seed, self.body_seed = int(world_seed), int(body_seed)
         self.world = generate(models.world_genome, world_seed, width)
@@ -70,6 +70,8 @@ class Life:
         self.human = Human(self.body, self.world, x=self.dry_spawn(self.world.width * 0.5))
         self.human.water = self.water
         self.fish = School(self.world, self.water)
+        from world.weather import Wind
+        self.wind = Wind(world_seed)
         self.brain = brain
         self.brain.reset_memory()
         self.brain.opt.lr = LR * PLAY_LR
@@ -97,8 +99,10 @@ class Life:
         self.last_phrase = ""
         self._log_clock = 0.0
         self.guitarist = guitarist
+        # chest - какие игрушки в сундуке (None - все; замер навигатора - пустой, как без гитары в 1.1.0)
         self.inv = Inventory(self.human.px + CHEST_AHEAD * self.human.facing, self.world.width,
-                             toys=[n for n in toy_registry.names() if n != "guitar" or guitarist is not None])
+                             toys=[n for n in toy_registry.names() if (n != "guitar" or guitarist is not None)
+                                   and (chest is None or n in chest)])
         if has_guitar:
             self.inv.where["guitar"] = "carried"
         if navigator is None:
@@ -116,6 +120,7 @@ class Life:
         self.seek_since = 0.0
         self.toy_journals = {}
         self.phys = None
+        self.drawings = []                     # рисунки, оставленные в этом мире (до смены мира)
         self.decide_clock = 0.0
         self.scores = []           # успех прошлых попыток гитары - для «роста»
         self.playing = False
@@ -225,6 +230,9 @@ class Life:
             self.swim.enter(cross=True)              # пловец: глубокая вода впереди - переплывает
             return self._water_tick(events)
         if self.toy is not None and self._toy_tick(events):
+            if getattr(self.toy, "rides", False):
+                self._clock_tick()                 # едет: тело ставит сама игрушка (велосипед)
+                return events
             # замах, удар, бросок: стоит на месте, тело по позе игрушки
             targets = self.toy.pose
             happened = h.step(list(targets), 0.0, False)
@@ -385,6 +393,19 @@ class Life:
                 self.toy_journals["ball"] = toy_base.journal(self.body_seed, "ball")
             journal = self.toy_journals["ball"]
             return BallSession(self, heads, journal, radius=BALL_R[0] + (BALL_R[1] - BALL_R[0]) * prop, color=c1)
+        spec = toy_registry.inplace(name)
+        if spec is not None:
+            from toys.inplace import InPlaceSession
+            heads_cls, attempt_cls = spec
+            heads = self.toy_heads.setdefault(name, heads_cls(seed=int(self.body_seed) % (2 ** 31)))
+            if name not in self.toy_journals:
+                self.toy_journals[name] = toy_base.journal(self.body_seed, name)
+            session_cls = InPlaceSession
+            if name in toy_registry.SESSIONS:
+                import importlib
+                mod, cls = toy_registry.SESSIONS[name]
+                session_cls = getattr(importlib.import_module(mod), cls)
+            return session_cls(self, name, heads, self.toy_journals[name], attempt_cls)
         return None
 
     def toy_visuals(self):
@@ -406,6 +427,10 @@ class Life:
                 out.append(("ball", hx, hy, r, c1))
             elif isinstance(where, float):
                 out.append(("ball", where, self.world.height_at(where) + r, r, c1))
+        for d in self.drawings[-12:]:
+            out.append(("drawing", d["x"], d["y"], (d["points"], d["pens"], d["facing"]), (0.15, 0.2, 0.7)))
+        if self.toy is not None and hasattr(self.toy, "visuals"):
+            out += self.toy.visuals()
         if self.toy is not None and getattr(self.toy, "target", None) is not None:
             out.append(("target", self.toy.target, self.world.height_at(self.toy.target), 0.0, (0.95, 0.85, 0.3)))
         return out
@@ -422,7 +447,11 @@ class Life:
 
     def _toy_tick(self, events):
         """Игра с игрушкой: True - он сейчас на месте (замах, удар), False - ходит (за мячом)."""
+        n = len(events)
         playing = self.toy.tick(DT, events)
+        for e in events[n:]:
+            if e[0] == "drawing":
+                self.drawings = (self.drawings + [e[1]])[-40:]
         if not playing:
             name = self.toy.name
             self.toy = None

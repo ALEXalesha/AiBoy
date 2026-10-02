@@ -76,11 +76,12 @@ def obstacle_ahead(world, x, facing):
 
 
 def wander(models, brain, world_seed, width, minutes, navigator=None, body_seed=7, learn=True, nav_learn=None,
-           explored_after=None, pull_mark=False):
+           explored_after=None, pull_mark=False, chest=()):
     """Гуляет minutes минут, как в игре. Возвращает развороты: на первом круге и потом (по
     своей воле и у препятствия), «туда-сюда» (два разворота за 5 с), осмотры, круги и долю
-    времени на первом круге, когда он шёл в начальную сторону."""
-    life = Life(models, world_seed, body_seed, width, brain, seed=world_seed, navigator=navigator)
+    времени на первом круге, когда он шёл в начальную сторону. Сундук по умолчанию пуст -
+    меряется ходьба (как в 1.1.0, где гитары в замере не было); у игр - свои законы."""
+    life = Life(models, world_seed, body_seed, width, brain, seed=world_seed, navigator=navigator, chest=chest)
     life.learn = learn
     life.nav_learn = nav_learn
     h = life.human

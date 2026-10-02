@@ -31,6 +31,7 @@ ACTIONS = ("вперёд", "назад", "осмотреться")
 IN = places.N_FEATURES + 2
 NAV_EVERY = 1.0          # с между решениями
 COMMIT = 12.0           # с после разворота - назад нельзя
+STUCK = 8.0             # с без продвижения к цели - застрял
 LOOK_GAP = 15.0          # с между «осмотреться»
 LOOK_TIME = 2.5          # с стоит и смотрит
 NOVEL = 1.0
@@ -67,6 +68,18 @@ class Walk:
         self.learn = True
         self.mean = 1.0              # средний интерес знакомых клеток (для «интерес здесь»)
         self.gap = {}                # метка -> расстояние до неё на прошлом шаге
+        self._goal = None            # x, куда он идёт за чем-то (еда, сундук, гитара) - кратчайшим путём
+        self.goal_best = None        # (ближе всего к цели за этот заход, когда)
+        self.goal_way = 0            # 0 - кратчайшим путём; ±1 - застрял, идёт в обход по кольцу
+
+    @property
+    def goal(self):
+        return self._goal
+
+    @goal.setter
+    def goal(self, x):
+        self._goal = None if x is None else float(x)
+        self.goal_best, self.goal_way = None, 0
 
     @property
     def looking(self):
@@ -122,6 +135,24 @@ class Walk:
         if r and self.prev is not None:
             self.prev[3] += r
         self.clock += dt
+        if self.goal is not None:
+            # идёт за чем-то конкретным: кратчайшим путём по кольцу, навигатор не спрашивается
+            # (замер: по одной тяге метки он за 70 с так и не дошёл до сундука с водой). Застрял
+            # (STUCK с ни на метр ближе - во впадине, ногами не вылезти) - идёт в обход: мир
+            # кольцо, другой дорогой тоже дойдёт
+            right = self.places.distance(x, self.goal, 1)
+            left = self.places.width - right
+            d = min(right, left)
+            if self.goal_best is None or d < self.goal_best[0] - 1.0:
+                self.goal_best = (d, t)
+            elif t - self.goal_best[1] > STUCK:
+                self.goal_way = -(self.goal_way or (1 if right <= left else -1))
+                self.goal_best = (1e9, t)            # заново, по новой дороге
+            way = self.goal_way or (1 if right <= left else -1)
+            self.want = way
+            self.look_left = 0.0
+            self.prev = None
+            return self.want
         if can_decide and not self.looking and self.clock >= NAV_EVERY:
             self.clock = 0.0
             self.decide(t, x, facing)

@@ -39,6 +39,7 @@ class PhysWorld:
         self.things = {}          # имя -> (тело, фигуры)
         self.frozen = {}          # имя -> (позиция, угол) - предмет за окном
         self.limbs = {}
+        self.forces = []          # f(dt) перед каждым подшагом: вода, ветер (pymunk сбрасывает силы после шага)
         self.build(center)
 
     # --- рельеф ---
@@ -147,6 +148,8 @@ class PhysWorld:
     def step(self, dt):
         h = dt / SUBSTEPS
         for _ in range(SUBSTEPS):
+            for f in self.forces:
+                f(h)
             self.space.step(h)
         for body, _ in self.things.values():
             vx, vy = body.velocity

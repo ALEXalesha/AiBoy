@@ -37,25 +37,38 @@ MIN_WORLD = 20.0            # с
 URGENT = 0.8                # нужда выше - гистерезис не держит
 T = 0.02                    # температура выбора
 STICK = 0.2                 # прибавка к тяге текущего занятия - гистерезис
+NEED_BASE = -0.1            # тяга есть, пить, отдыхать без нужды
+NEEDS = ("eat", "drink", "rest")
 DECIDE_EVERY = 5.0          # с между точками выбора, пока гуляет
 MOOD_K = 1.0 - math.exp(-1.0 / 120.0)   # настроение - среднее удовольствия за ~2 минуты
 REF_ERR = 0.0025            # обычная ошибка предсказателя на ходу (замер 1.1.0)
 
 
+def urgent_pull():
+    """Нужда URGENT в единицах срочности (acts/needs.py)."""
+    from acts.needs import URGE_FROM, URGE_K
+    return URGE_K * ((URGENT - URGE_FROM) / (1.0 - URGE_FROM)) ** 2
+
+
 class Activity:
-    def __init__(self, name, half_min, liking=0.5, bias=0.0, attempts=True):
+    def __init__(self, name, half_min, liking=0.5, bias=0.0, attempts=True, need=False):
         self.name = name
         self.half = half_min
         self.liking = liking
         self.boredom = 0.0
         self.bias = bias
         self.attempts_based = attempts
+        self.need = need             # есть, пить, отдыхать: тянет только нужда
         self.history = []            # последние удовольствия
 
     def rate(self):
         return math.log(2.0) / (self.half * 60.0)
 
     def pull(self, urgency=0.0):
+        if self.need:
+            # без нужды есть не тянет, как бы вкусно ни было (что вкусно - знает его вкус, а
+            # не тяга занятия); NEED_BASE - чтобы слабая нужда не перебивала игру
+            return urgency + NEED_BASE
         return self.liking * (1.0 - self.boredom) + self.bias + urgency
 
 
@@ -69,6 +82,9 @@ class Choice:
         self.mood = 0.0              # -1..1
         self.freq = freq
         self.add("guitar", HALF[freq], bias=BIAS[freq])
+        for n in NEEDS:
+            self.acts[n] = Activity(n, 60.0, liking=0.0, need=True)
+        self.add("swim", 5.0, liking=0.45)
 
     @property
     def freq(self):
@@ -117,7 +133,7 @@ class Choice:
 
     # --- выбор ---
     def can_switch(self, urgency=None):
-        if urgency and max(urgency.values()) > URGENT:
+        if urgency and max(urgency.values()) > urgent_pull():
             return True
         if self.current == "explore":
             return self.since >= MIN_WORLD

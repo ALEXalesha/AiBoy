@@ -30,6 +30,7 @@ JUMP_VX = 0.6         # м/с - и вперёд, по взгляду
 JUMP_CD = 2.0         # с между прыжками
 FALL_V = 8.5          # м/с - приземление быстрее - падение
 FALL_TIME = 1.6       # с лежит и встаёт
+WADE_SLOW = 0.6       # вброд шаг короче
 CONTACT = 0.015       # м - стопа ближе к земле - стоит
 SNAP = 0.06           # м - под горку таз прилипает к земле, а не подпрыгивает
 TURN = 0.35           # гистерезис разворота
@@ -48,6 +49,9 @@ class Human:
         self.command = self.angles.copy()      # сглаженная команда, к ней тянутся суставы
         self.facing = 1
         self.turn_cd = 0.0
+        self.stride = 1.0          # усталость делает шаг короче (acts/needs.py), 1 - как обычно
+        self.water = None          # world/water.Water - вода мира, или None
+        self.can_swim = False      # глубже брода - только если умеет плавать (задача 11)
         self.turn_wish = 0.0       # с - сколько держится желание развернуться
         self.clock = 0.0           # с - свои часы тела: от них «пульс» в наблюдении мозга
         self.px = float(x)
@@ -138,9 +142,20 @@ class Human:
         rel = skeleton.feet(self.body, self.angles, self.facing)
         self.anchor = [self.px + fx for fx, _ in rel]
 
+    def wade_depth(self):
+        """Глубже - не вброд: половина ноги."""
+        return 0.5 * self.body.leg()
+
     def _blocked(self, px, nx, rel):
         rise = self._req(nx, rel) - self._req(px, rel)
-        return rise > max(0.03, WALL_SLOPE * abs(nx - px))
+        if rise > max(0.03, WALL_SLOPE * abs(nx - px)):
+            return True
+        # глубокая вода - как стена, пока он не умеет плавать (мир - кольцо: обойдёт другой
+        # дорогой, глубокий водоём в мире один - world/water.py)
+        if self.water is not None and not self.can_swim:
+            here, there = self.water.depth_at(px), self.water.depth_at(nx)
+            return there > self.wade_depth() and there > here
+        return False
 
     def _on_ground(self, rel, rel_old, dt):
         planted = [i for i in (0, 1) if self.contact[i]] or [0, 1]
@@ -151,6 +166,12 @@ class Human:
                 planted = [int(np.argmax(need))]
         want = sum(self.anchor[i] - rel[i][0] for i in planted) / len(planted)
         dx = float(np.clip(want - self.px, -SLIP, SLIP))
+        if self.water is not None and self.water.depth_at(self.px) > 0.05:
+            dx *= WADE_SLOW                     # вброд - медленнее
+        if self.stride < 1.0 and self._ground(self.px + dx) <= self._ground(self.px) + 1e-6:
+            # устал - по ровному и вниз шаг короче; в гору - во всю силу: иначе усталый
+            # застревал во впадине (замер: 71 с жажды выше 0.9 у сундука в 46 м)
+            dx *= self.stride
         if dx and self._blocked(self.px, self.px + dx, rel):
             dx = 0.0
         push = self._req(self.px, rel) - self._req(self.px, rel_old)    # разгибание ног

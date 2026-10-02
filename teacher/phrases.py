@@ -58,6 +58,15 @@ REFUSED = ("не хочу, я играю", "ещё немного поиграю
 OFFER_YES = ("о, давай!", "давай поиграю", "хорошо, возьму", "ура, игрушка!")
 OFFER_NO = ("не сейчас", "не хочу сейчас", "потом", "мне и так интересно")
 MUSIC = LEARNING + GOT_IT + FAILING + FREE + STOOD_UP + AGREED + REFUSED + OFFER_YES + OFFER_NO
+# нужды и еда
+HUNGRY = ("хочу есть", "проголодался", "где бы поесть", "есть хочется")
+THIRSTY = ("хочу пить", "пить хочется", "где бы попить")
+TIRED = ("устал", "надо отдохнуть", "посижу немного", "ноги устали")
+TASTY = ("вкусно!", "ммм, вкусно", "ещё бы такого", "как вкусно")
+NOT_TASTY = ("фу, невкусно", "больше не буду это есть", "невкусно...", "фу")
+SWIMMING = ("плыву!", "учусь плавать", "вода тёплая", "буль-буль", "плыву, плыву")
+RESCUED = ("фух, на берег", "хватит воды", "чуть не нахлебался", "выбрался")
+NEEDS = HUNGRY + THIRSTY + TIRED + TASTY + NOT_TASTY + SWIMMING + RESCUED
 
 
 def color_name(h, s, v):
@@ -95,6 +104,14 @@ def entity_phrases(kind, color, side, near):
 def topics(state):
     """[(вес, [фразы])] - что можно сказать в этом состоянии."""
     s = lambda name: float(state[IDX[name]])  # noqa: E731
+    if s("rescued") > 0.5:
+        return [(6.0, list(RESCUED))]
+    if s("swimming") > 0.5:
+        return [(4.0, list(SWIMMING))]
+    if s("tasty") > 0.5:
+        return [(6.0, list(TASTY))]
+    if s("not_tasty") > 0.5:
+        return [(6.0, list(NOT_TASTY))]
     if s("offered") > 0.5:
         return [(5.0, list(OFFER_YES if s("agreed") > 0.5 else OFFER_NO))]
     if s("asked_put") > 0.5:
@@ -114,6 +131,9 @@ def topics(state):
             return [(3.0, list(LEARNING)), (0.5, list(FREE))]
         return [(3.0, list(FREE))]
     out = [(0.7, list(IDLE))]
+    for flag, words, w in (("hungry", HUNGRY, 2.5), ("thirsty", THIRSTY, 2.5), ("tired", TIRED, 2.5)):
+        if s(flag) > 0.5:
+            out.append((w, list(words)))
     if s("fell") > 0.5:
         out.append((6.0, list(FALL)))
     if s("airborne") > 0.5:
@@ -159,7 +179,7 @@ def words(text):
 
 def vocabulary():
     """Все слова, которые учитель может сказать."""
-    texts = list(FALL + FLY + JUMP + CURIOUS + BORED + NIGHT + FLAT + FAST + IDLE + DEEP + UP + MUSIC)
+    texts = list(FALL + FLY + JUMP + CURIOUS + BORED + NIGHT + FLAT + FAST + IDLE + DEEP + UP + MUSIC + NEEDS)
     for kind in KINDS:
         for color in COLORS:
             for side in (1, -1):

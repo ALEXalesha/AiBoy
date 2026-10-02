@@ -24,7 +24,16 @@ from brain.brain import ALIVE, FALL_PENALTY, LR, PHYSICS_PER_STEP, PLAY_LR, PLAY
 from brain.observe import observe
 from brain.state import summarize
 from music import hands
-from acts.choice import DECIDE_EVERY, STICK, Choice, pleasure
+from acts.choice import DECIDE_EVERY, NEEDS, STICK, Choice, pleasure
+from acts.daily import Daily
+from acts.swim import Swim
+from skills.swim import Swimmer
+from acts.eat import FoodPrefs
+from acts.needs import Backpack, Needs
+from world.food import Food
+from world.fish import School
+from toys import registry as toy_registry
+from world.water import Water
 from music.session import FPS
 from world.generate import generate
 
@@ -36,6 +45,8 @@ TEMPERATURE = 0.75
 LOG_EVERY = 0.5            # с - точка графика любопытства
 INTENT_K = 1.0 - math.exp(-DT / 1.0)   # намерение усредняется за секунду
 STAND = tuple(skeleton.rest_angles())  # стоит и осматривается
+SIT_GROUND = (0.15, 0.1, 0.25, 0.2, 0.7, 0.6, 1.55, 1.5, 0.25, 0.3)   # сидит на земле, ноги вперёд
+REST_LYING = 10.0          # с «лежит» за раз - продлевается, пока отдыхает
 GUITAR_AHEAD = CHEST_AHEAD  # м - где сундук (и в нём гитара) от места появления
 PICKUP = REACH             # м - ближе - дотянулся до сундука или гитары на земле
 ATTEMPT_PAUSE = 0.8        # с тишины между попытками
@@ -49,12 +60,16 @@ SEEK_MAX = 90.0            # с - столько идёт к положенно�
 
 class Life:
     def __init__(self, models, world_seed, body_seed, width, brain, frequency="normal", seed=None,
-                 guitarist=None, has_guitar=False, guitar_freq="sometimes", choice=None, navigator=None):
+                 guitarist=None, has_guitar=False, guitar_freq="sometimes", choice=None, navigator=None,
+                 needs=None, backpack=None, food_prefs=None, swimmer=None, toy_heads=None):
         self.models = models
         self.world_seed, self.body_seed = int(world_seed), int(body_seed)
         self.world = generate(models.world_genome, world_seed, width)
+        self.water = Water(self.world)
         self.body = generate_body(models.body_genome, body_seed)
-        self.human = Human(self.body, self.world, x=self.world.width * 0.5)
+        self.human = Human(self.body, self.world, x=self.dry_spawn(self.world.width * 0.5))
+        self.human.water = self.water
+        self.fish = School(self.world, self.water)
         self.brain = brain
         self.brain.reset_memory()
         self.brain.opt.lr = LR * PLAY_LR
@@ -83,7 +98,7 @@ class Life:
         self._log_clock = 0.0
         self.guitarist = guitarist
         self.inv = Inventory(self.human.px + CHEST_AHEAD * self.human.facing, self.world.width,
-                             toys=["guitar"] if guitarist is not None else [])
+                             toys=[n for n in toy_registry.names() if n != "guitar" or guitarist is not None])
         if has_guitar:
             self.inv.where["guitar"] = "carried"
         if navigator is None:
@@ -92,6 +107,15 @@ class Life:
         nav_rng = np.random.default_rng([int(world_seed), int(body_seed), 7] if seed is None else [int(seed), 7])
         self.walk = Walk(self.world.width, self.human.facing, navigator, nav_rng)
         self.choice = choice if choice is not None else Choice(guitar_freq, np.random.default_rng(self.rng.integers(2 ** 31)))
+        for t in toy_registry.TOYS.values():
+            if t.name != "guitar":
+                self.choice.add(t.name, t.half)
+        self.toy_heads = toy_heads or {}       # игрушка -> чему она его научила (головы, навыки)
+        self.toy = None                        # идущая игра с игрушкой (toys/base.Session)
+        self.seek_toy = None                   # за какой игрушкой идёт (к сундуку или где лежит)
+        self.seek_since = 0.0
+        self.toy_journals = {}
+        self.phys = None
         self.decide_clock = 0.0
         self.scores = []           # успех прошлых попыток гитары - для «роста»
         self.playing = False
@@ -105,6 +129,16 @@ class Life:
         self.stopped = False
         self.seeking = None        # с какого времени идёт за гитарой (к сундуку или где положил)
         self.walk.places.marks["сундук"] = self.inv.chest_x
+        self.needs = needs if needs is not None else Needs()
+        self.backpack = backpack if backpack is not None else Backpack()
+        self.food = Food(self.world)
+        self.daily = Daily(self, self.needs, self.backpack,
+                           food_prefs if food_prefs is not None else FoodPrefs(seed=int(body_seed) % (2 ** 31)), self.food)
+        self.posture = "stand"
+        self._last_x, self._last_y = self.human.px, self.human.py
+        self.swim = Swim(self, swimmer if swimmer is not None else Swimmer(seed=int(body_seed) % (2 ** 31)))
+        self.human.can_swim = self.swim.swimmer.can_swim()
+        self.swim_flags = {}
 
     # где гитара: у него, в сундуке или на земле (toys/chest.py)
     @property
@@ -132,6 +166,16 @@ class Life:
     def guitar_x(self, x):
         self.inv.where["guitar"] = float(x)
 
+    def dry_spawn(self, x):
+        """Появляется на суше: если середина мира под водой - ближайший сухой берег (и сундук
+        там же, не в воде)."""
+        for d in np.arange(0.0, self.world.width / 2, 0.5):
+            for s in (1, -1):
+                c = x + s * d
+                if all(self.water.depth_at(c + o) <= 0.0 for o in (-CHEST_AHEAD, 0.0, CHEST_AHEAD)):
+                    return c % self.world.width
+        return x
+
     @property
     def distance(self):
         return self.human.odometer
@@ -139,8 +183,10 @@ class Life:
     def state(self):
         d = self.decision
         way = 0.0 if self.walk.looking else float(self.walk.want)
+        flags = dict(self.need_flags())
+        flags.update(self.music_flags)
         return summarize(self.human, self.world, way if d else 0.0, d.want_jump if d else 0.0,
-                         self.brain.curiosity, self.fell / FELL_MEMORY, music=self.music_flags)
+                         self.brain.curiosity, self.fell / FELL_MEMORY, music=flags)
 
     def say(self):
         s = self.state()
@@ -167,10 +213,26 @@ class Life:
     def tick(self):
         if self.stopped:
             return []
+        self._needs_tick()
         if self.playing:
             return self._guitar_tick()
         events = []
         h = self.human
+        if self.swim.mode is not None and self.swim.tick(DT, events):
+            return self._water_tick(events)
+        if (self.swim.mode is None and h.can_swim and h.grounded
+                and self.water.depth_at(h.px + 0.4 * h.facing) > h.wade_depth()):
+            self.swim.enter(cross=True)              # пловец: глубокая вода впереди - переплывает
+            return self._water_tick(events)
+        if self.toy is not None and self._toy_tick(events):
+            # замах, удар, бросок: стоит на месте, тело по позе игрушки
+            targets = self.toy.pose
+            happened = h.step(list(targets), 0.0, False)
+            events += [(e,) for e in happened]
+            self._clock_tick()
+            return events
+        if self.daily.task is not None and self.daily.tick(DT, h.px, self.time, events):
+            return self._busy_tick(events)
         br = self.brain
         interest = br.last_seen_err / (br.err_ema + 1e-12) if br.err_ema else 1.0
         self.walk.learn = self.learn if self.nav_learn is None else self.nav_learn
@@ -191,7 +253,7 @@ class Life:
             self._clock_tick()
             self._world_guitar(events)
             return events
-        if self.k % PHYSICS_PER_STEP == 0:
+        if self.k % PHYSICS_PER_STEP == 0 or self.decision is None:
             obs = observe(self.human, self.world)
             self.last_obs, self.obs_x = obs, self.human.px
             self.obs_ground = self.world.height_at(self.human.px)
@@ -222,6 +284,10 @@ class Life:
 
     def _clock_tick(self):
         self.choice.tick(DT)
+        self._phys_tick()
+        if self.fish.fish:
+            splash = self.human.px if self.swim.in_water else None
+            self.fish.step(DT, splash)
         self.k += 1
         self.time += DT
         self.since_phrase += DT
@@ -233,16 +299,212 @@ class Life:
             self.curiosity_log.append(float(self.brain.last_err))
             del self.curiosity_log[:-240]
 
+    # --- нужды ---
+    def _needs_tick(self):
+        h = self.human
+        dx = abs(h.px - self._last_x)
+        dy = h.py - self._last_y if h.grounded else 0.0
+        self._last_x, self._last_y = h.px, h.py
+        self.needs.tick(DT, walked=dx, climbed=max(0.0, dy), speed=abs(h.vx), night=self.world.night,
+                        posture=self.posture)
+        h.stride = self.needs.stride()
+        if self.inv.dist(h.px, self.inv.chest_x) < PICKUP and not self.backpack.full():
+            self.backpack.refill()              # у сундука рюкзак пополняется
+
+    def _busy_tick(self, events):
+        """Занят на месте: ест, пьёт (стоит), отдыхает (сидит или лежит). Мозг ходьбы не шагает."""
+        h = self.human
+        task = self.daily.task
+        posture = task.posture if task is not None else "stand"
+        self.posture = posture
+        if posture == "lie":
+            h.fallen = max(h.fallen, 0.6)        # лежит; вставать - когда отдых кончится
+            happened = h.step(None, 0.0, False)
+        elif posture == "sit":
+            happened = h.step(list(SIT_GROUND), 0.0, False)
+        else:
+            targets = h.angles.copy()
+            targets[2:6] = STAND[2:6]
+            if task is not None and task.act in ("eat", "drink"):
+                targets[2], targets[4] = 2.0, 2.2   # рука ко рту
+            happened = h.step(list(targets), 0.0, False)
+        events += [(e,) for e in happened]
+        if any(e[0] == "ate" for e in events):
+            events.append(("phrase", self.say()))      # вкусно или нет - сразу скажет
+            self.daily.flags = {}
+        if task is not None and task.act == "rest":
+            self.decide_clock += DT
+            if self.decide_clock >= DECIDE_EVERY:
+                self.decide_clock = 0.0
+                if self.choice.choose(self.available(), self.needs.urgency()) != "rest":
+                    self.daily.finish(events, pleasure=0.5)
+                    self.posture = "stand"
+                    if h.fallen > 0:
+                        h.fallen = min(h.fallen, 0.5)    # встаёт
+                else:
+                    task.posture = "lie" if self.needs.tired > 0.75 or task.posture == "lie" else "sit"
+        if self.daily.task is None:
+            self.posture = "stand"
+        self._clock_tick()
+        return events
+
+    # --- игрушки (кроме гитары) ---
+    def physics(self):
+        """pymunk-мир предметов этой жизни - создаётся, когда понадобился."""
+        if self.phys is None:
+            from physics.world import PhysWorld
+            self.phys = PhysWorld(self.world, center=self.human.px)
+            self.phys.forces.append(self._water_forces)
+        return self.phys
+
+    def _water_forces(self, dt):
+        from physics import water as pwater
+        for name, (body, shapes) in self.phys.things.items():
+            level = self.water.level_at(body.position.x)
+            if level is None:
+                continue
+            s = shapes[0]
+            if hasattr(s, "radius") and not hasattr(s, "get_vertices"):
+                pwater.apply(body, "circle", s.radius, level, dt)
+            else:
+                bb = s.bb
+                pwater.apply(body, "box", (bb.right - bb.left, bb.top - bb.bottom), level, dt)
+
+    def _phys_tick(self):
+        if self.phys is not None and (self.phys.things or self.phys.frozen):
+            self.phys.follow(self.human.px)
+            self.phys.step(DT)
+
+    def make_session(self, name):
+        from toys import base as toy_base
+        if name == "ball":
+            from toys.ball import BALL_R, BallHeads, BallSession
+            heads = self.toy_heads.setdefault("ball", BallHeads(seed=int(self.body_seed) % (2 ** 31)))
+            c1, _, prop = toy_base.look(self.body_seed, toy_registry.names().index("ball"))
+            if "ball" not in self.toy_journals:
+                self.toy_journals["ball"] = toy_base.journal(self.body_seed, "ball")
+            journal = self.toy_journals["ball"]
+            return BallSession(self, heads, journal, radius=BALL_R[0] + (BALL_R[1] - BALL_R[0]) * prop, color=c1)
+        return None
+
+    def toy_visuals(self):
+        """Что нарисовать из игрушек: [(вид, x, y, размер, цвет)] - мяч в полёте, у него в руке
+        или на земле; метка цели."""
+        from toys import base as toy_base
+        out = []
+        if "ball" in self.inv.where:
+            c1, _, prop = toy_base.look(self.body_seed, toy_registry.names().index("ball"))
+            from toys.ball import BALL_R
+            r = BALL_R[0] + (BALL_R[1] - BALL_R[0]) * prop
+            where = self.inv.where["ball"]
+            b = self.phys.body("мяч") if self.phys is not None else None
+            if b is not None:
+                out.append(("ball", float(b.position.x), float(b.position.y), r, c1))
+            elif where == "carried":
+                pts = self.human.points()
+                hx, hy = pts["ha_r" if self.human.facing > 0 else "ha_l"]
+                out.append(("ball", hx, hy, r, c1))
+            elif isinstance(where, float):
+                out.append(("ball", where, self.world.height_at(where) + r, r, c1))
+        if self.toy is not None and getattr(self.toy, "target", None) is not None:
+            out.append(("target", self.toy.target, self.world.height_at(self.toy.target), 0.0, (0.95, 0.85, 0.3)))
+        return out
+
+    def start_toy(self, name, events):
+        self.toy = self.make_session(name)
+        if self.toy is None:
+            self.choice.switch("explore")
+            return
+        if self.choice.current != name:
+            self.choice.switch(name)
+        events.append(("toy_start", name))
+        self.toy.begin()
+
+    def _toy_tick(self, events):
+        """Игра с игрушкой: True - он сейчас на месте (замах, удар), False - ходит (за мячом)."""
+        playing = self.toy.tick(DT, events)
+        if not playing:
+            name = self.toy.name
+            self.toy = None
+            self.walk.goal = None
+            if self.inv.where.get(name) == "carried" and self.wants_to_leave_it(name):
+                self.inv.put(name, self.human.px)
+                self.walk.places.marks[name] = self.human.px
+                events.append(("put_toy", name))
+            return False
+        return self.toy.pose is not None
+
+    def _water_tick(self, events):
+        for e in events:
+            if e[0] == "rescued":
+                self.swim_flags = {"rescued": 1.0}
+            elif e[0] == "ashore":
+                if e[1]:
+                    self.swim_flags = {"rescued": 1.0}
+                    events.append(("phrase", self.say()))
+                self.swim_flags = {}
+                if self.choice.current == "swim":
+                    self.choice.switch("explore")
+                self.decide_clock = 0.0
+        if self.swim.in_water and not self.swim_flags:
+            self.swim_flags = {"swimming": 1.0}
+        elif not self.swim.in_water and self.swim_flags.get("swimming"):
+            self.swim_flags = {}
+        self.posture = "swim"
+        self._clock_tick()
+        return events
+
+    def after_swim(self, r):
+        """Попытка плавания кончилась: удовольствие - в выбор; стал пловцом - глубокая вода открыта."""
+        from skills.swim import SWIMMER
+        self.choice.after_attempt("swim", pleasure(min(1.0, max(0.0, r) / (2 * SWIMMER)),
+                                                   self.swim.swimmer.history[:-1]))
+        self.human.can_swim = self.swim.swimmer.can_swim()
+        if self.choice.choose(self.available(), self.needs.urgency()) != "swim":
+            self.swim.mode = "cross"                 # хватит - к берегу
+
+    def need_flags(self):
+        n = self.needs
+        f = {"hungry": 1.0 if n.hunger > 0.6 else 0.0, "thirsty": 1.0 if n.thirst > 0.6 else 0.0,
+             "tired": 1.0 if n.tired > 0.6 else 0.0}
+        f.update(self.daily.flags)
+        f.update(self.swim_flags)
+        return f
+
     # --- гитара ---
     def available(self):
         acts = ["explore"]
         if self.guitarist is not None and "guitar" in self.inv.where:
             acts.append("guitar")
+        acts += self.daily.available(self.human.px, self.time)
+        if self.swim.available(self.human.px):
+            acts.append("swim")
+        for t in toy_registry.TOYS.values():
+            if t.name == "guitar" or t.name not in self.inv.where:
+                continue
+            if t.needs == "water" and not self.water.ponds:
+                continue                         # удочка - только где есть вода
+            if self.inv.where[t.name] == "flying":
+                continue
+            acts.append(t.name)
         return acts
 
     def _world_guitar(self, events):
         self.choice.world_interest(self.brain.err_ema, DT)
         self.decide_clock += DT
+        if self.seek_toy is not None:
+            # идёт за игрушкой: взял (из сундука или с земли) - играет
+            if self.inv.take(self.seek_toy, self.human.px):
+                name, self.seek_toy = self.seek_toy, None
+                self.walk.goal = None
+                events.append(("pickup_toy", name))
+                self.start_toy(name, events)
+                return
+            if self.time - self.seek_since > SEEK_MAX:
+                self.seek_toy = None
+                self.walk.goal = None
+                self.choice.switch("explore")
+            return
         if self.seeking is not None and not self.has_guitar:
             # идёт за гитарой: берёт, когда дотянулся (из сундука или с земли), и садится играть
             if self.inv.take("guitar", self.human.px):
@@ -254,11 +516,36 @@ class Life:
                 return
             if self.time - self.seeking > SEEK_MAX:
                 self.seeking = None                 # не дошёл - решит заново
-                self.walk.pulls.pop("гитара", None)
-        if (self.guitarist is not None and self.seeking is None and self.decide_clock >= DECIDE_EVERY
+                self.walk.goal = None
+        if (self.seeking is None and self.daily.task is None and self.swim.mode is None and self.toy is None
+                and self.decide_clock >= DECIDE_EVERY
                 and self.human.grounded and self.human.fallen <= 0 and not self.walk.looking):
             self.decide_clock = 0.0
-            if self.choice.choose(self.available()) == "guitar":
+            pick = self.choice.choose(self.available(), self.needs.urgency())
+            if pick in toy_registry.TOYS and pick != "guitar":
+                held = self.inv.carried
+                if held == pick:
+                    self.start_toy(pick, events)
+                    return
+                if held is not None:
+                    self.put_held()
+                    events.append(("put_toy", held))
+                self.seek_toy, self.seek_since = pick, self.time
+                self.walk.goal = self.inv.position(pick)
+                if self.walk.goal is None:
+                    self.seek_toy = None
+                    self.choice.switch("explore")
+                return
+            if pick == "swim":
+                if not self.swim.start(self.human.px):
+                    self.choice.switch("explore")
+                return
+            if pick in NEEDS:
+                self.daily.start(pick, self.human.px, self.time)
+                if self.daily.task is None:
+                    self.choice.switch("explore")
+                return
+            if pick == "guitar":
                 if self.has_guitar:
                     self.sit_down()
                     events.append(("sit",))
@@ -266,13 +553,26 @@ class Life:
                     # гитара в сундуке или лежит, где он её положил: он идёт к ней (куда - решает
                     # навигатор по памяти мест, метка «гитара» тянет), играть - когда дойдёт
                     self.choice.switch("explore")
+                    if self.inv.carried not in (None, "guitar"):
+                        events.append(("put_toy", self.inv.carried))
+                        self.put_held()
                     self.seeking = self.time
                     self.walk.places.marks["гитара"] = self.inv.position("guitar")
-                    self.walk.pulls["гитара"] = 1.0
+                    self.walk.goal = self.inv.position("guitar")
+
+    def put_held(self):
+        """Руки заняты не тем: положить, что держит, здесь же."""
+        held = self.inv.carried
+        if held == "guitar":
+            self.put_guitar()
+        elif held is not None:
+            self.inv.put(held, self.human.px)
+            self.walk.places.marks[held] = self.human.px
 
     def pick_guitar(self):
         self.inv.where["guitar"] = "carried"
         self.seeking = None
+        self.walk.goal = None
         self.walk.pulls.pop("гитара", None)
         self.walk.places.marks.pop("гитара", None)
 
@@ -312,11 +612,11 @@ class Life:
         self.music_flags = {"playing": 1.0} if self.playing else {}
         return took, events
 
-    def wants_to_leave_it(self):
-        """Вставая: положить гитару здесь или взять с собой. Нравится играть - берёт с собой (скоро
-        захочется снова), тянет гулять далеко - кладёт, чтобы не мешала. Softmax, не правило."""
+    def wants_to_leave_it(self, name="guitar"):
+        """Наигравшись: положить игрушку здесь или взять с собой. Нравится она - берёт с собой
+        (скоро захочется снова), тянет гулять далеко - кладёт, чтобы не мешала. Softmax, не правило."""
         c = self.choice
-        carry = c.acts["guitar"].liking
+        carry = c.acts[name].liking
         leave = c.acts["explore"].pull()
         return self.rng.random() < 1.0 / (1.0 + math.exp(-(leave - carry) / PUT_T))
 
@@ -414,7 +714,8 @@ class Life:
             if self.since_phrase >= PHRASE_PAUSE[self.frequency] or got:
                 events.append(("phrase", self.say()))
             self.attempt = None
-            if self.choice.choose(self.available()) != "guitar":
+            pick = self.choice.choose(self.available(), self.needs.urgency())
+            if pick != "guitar":
                 self.stand_up()
                 self.music_flags = {"stood_up": 1.0}
                 events.append(("stand",))
@@ -423,6 +724,9 @@ class Life:
                 if self.wants_to_leave_it():
                     self.put_guitar()
                     events.append(("put",))
+                if pick in NEEDS:
+                    self.choice.switch(pick)
+                    self.daily.start(pick, self.human.px, self.time)
         self._clock_tick()
         return events
 

@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox, QComb
 import paths
 from body.physics import DT
 from game import models, theme
-from game.chart import CurveChart, Sparkline, time_label
+from game.chart import CurveChart, NeedsView, Sparkline, time_label
 from game.chat import ChatView, clock
 from game.gallery import Gallery, make_entry
 from game.icon import app_icon
@@ -33,6 +33,7 @@ from game.ui import Page, button, card, label, meters, plural, segmented
 from game.audio import SR, AudioOut
 from game.keyboard import KeyboardPage
 from game import guitar_store as gstore
+from game import life_store
 from game.guitar_panel import GuitarPanel
 from game.attempts import AttemptsPage
 from game.catalog import CatalogPage
@@ -199,6 +200,11 @@ class ObservePage(Page):
             grid.addWidget(self.values[key], r, 1, Qt.AlignmentFlag.AlignRight)
         col.addLayout(grid)
         col.addSpacing(8)
+        col.addWidget(label("Настроение и нужды", "section"))
+        self.needs_view = NeedsView()
+        self.needs_view.setToolTip("Лицо - его настроение: среднее удовольствие от занятий за последние минуты")
+        col.addWidget(self.needs_view)
+        col.addSpacing(6)
         col.addWidget(label("Любопытство", "section"))
         col.addWidget(label("ошибка его предсказателя: чем выше, тем больше нового", "hint", wrap=True))
         self.ring = RingMap(window.colors())
@@ -252,9 +258,11 @@ class ObservePage(Page):
         self.stop_life()
         width = width or WORLD_WIDTH[w.settings.world_size]
         g = gstore.load(body_seed, w.songbook, mode=w.settings.guitar_mode)
+        needs, pack, choice, prefs, swimmer = life_store.load(body_seed, w.settings.guitar_freq)
         self.life = Life(w.models, world_seed, body_seed, width, w.brain, frequency=w.settings.phrase_freq,
-                         navigator=w.navigator,
-                         guitarist=g, guitar_freq=w.settings.guitar_freq)   # гитара - в сундуке
+                         navigator=w.navigator, guitarist=g, guitar_freq=w.settings.guitar_freq,   # гитара - в сундуке
+                         choice=choice, needs=needs, backpack=pack, food_prefs=prefs, swimmer=swimmer,
+                         toy_heads=life_store.load_toys(body_seed))
         self.show_guitar(False)
         self.refresh_put()
         self.counted_time = self.counted_dist = 0.0
@@ -352,6 +360,8 @@ class ObservePage(Page):
 
     def save_guitar(self):
         life = self.life
+        if life is not None:
+            life_store.save(life)
         if life is not None and life.guitarist is not None:
             gstore.save(life.guitarist)
 
@@ -522,6 +532,17 @@ class ObservePage(Page):
                 self.show_guitar(False)
             elif kind == "put":
                 self.save_guitar()
+            elif kind == "sound":
+                # звуки игрушек - только на x1-x2 (на x4-x16 пропускаются; гитара - своим каналом)
+                if self.effective_speed() <= 2 and not self.paused:
+                    from sound import sfx
+                    audio = sfx.make(data[0], data[1], data[2])
+                    if audio is not None:
+                        w.audio.play(audio, data[0], channel="toys")
+            elif kind == "toy_attempt":
+                w.stats.attempts += 1
+            elif kind in ("toy_done", "put_toy"):
+                self.save_guitar()
             if kind in ("pickup", "put", "sit", "stand"):
                 self.refresh_put()
 
@@ -543,6 +564,7 @@ class ObservePage(Page):
         v["jumps"].setText(str(life.jumps))
         v["falls"].setText(str(life.falls))
         self.spark.set_values(life.curiosity_log[-120:])
+        self.needs_view.set_state(life.choice.mood, life.needs)
         self.ring.update()
         b = life.brain
         self.learn_note.setText(f"Мозг учится на ходу: {b.steps:,} шагов обучения".replace(",", " "))
@@ -551,6 +573,7 @@ class ObservePage(Page):
         self.view.colors = theme.palette(name)
         self.ring.colors = theme.palette(name)
         self.spark.set_theme(name)
+        self.needs_view.set_theme(name)
 
 
 # --- галерея ---

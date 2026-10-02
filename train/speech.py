@@ -91,6 +91,14 @@ def augment(states, rng):
     k = rng.random(n) < 0.06
     s[k, IDX["asked_put"]] = 1.0
     s[k, IDX["agreed"]] = (rng.random(k.sum()) < 0.5).astype(np.float32)
+    for flag, share in (("hungry", 0.1), ("thirsty", 0.1), ("tired", 0.1)):
+        s[rng.random(n) < share, IDX[flag]] = 1.0
+    s[rng.random(n) < 0.05, IDX["swimming"]] = 1.0
+    s[rng.random(n) < 0.03, IDX["rescued"]] = 1.0
+    k = rng.random(n) < 0.04
+    s[k, IDX["tasty"]] = 1.0
+    k = rng.random(n) < 0.04
+    s[k, IDX["not_tasty"]] = 1.0
     k = rng.random(n) < 0.05
     s[k, IDX["offered"]] = 1.0
     s[k, IDX["asked_put"]] = 0.0
@@ -138,6 +146,8 @@ def named_examples(net, rng):
              "встал после игры": st(stood_up=1), "попросили положить, согласился": st(asked_put=1, agreed=1),
              "попросили положить, не хочет": st(asked_put=1, playing=1),
              "предложили игрушку, взял": st(offered=1, agreed=1), "предложили, не взял": st(offered=1),
+             "плывёт": st(swimming=1), "выбрался на берег": st(rescued=1),
+             "голоден": st(hungry=1), "устал": st(tired=1), "вкусно": st(tasty=1), "невкусно": st(not_tasty=1),
              "упал": st(fell=1.0), "холм справа": st(hill_right=1.0), "синее дерево рядом": blue_tree,
              "скучно": st(curiosity=0.05), "ночь": st(night=1.0, curiosity=0.4), "летит": st(airborne=1, grounded=0)}
     return {name: [net.sample(s, rng, TEMPERATURE) for _ in range(4)] for name, s in cases.items()}

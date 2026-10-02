@@ -40,3 +40,4 @@ def names():
 
 
 register(Toy("guitar", "Гитара", carry="back", half=5.0))
+register(Toy("ball", "Мяч", carry="hands", half=5.0))

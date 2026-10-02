@@ -638,8 +638,85 @@ def draw_thoughts(p, f, head, items, colors):
 
 # --- кадр целиком ---
 
+def draw_fish(p, f, world, school):
+    """Рыбы: тело-эллипс, хвост-треугольник, глаз; цвет и форма - из сети рыб."""
+    for fish in school.fish:
+        x, y = school.position(fish)
+        x = unwrap(x, f.cam_x, world.width)
+        if abs(x - f.cam_x) > f.half + 1:
+            continue
+        L, H = fish.length * f.ppm, fish.height * f.ppm
+        c = QPointF(f.X(x), f.Y(y))
+        p.save()
+        p.translate(c)
+        if fish.dir < 0:
+            p.scale(-1, 1)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(qc(fish.color, 0.9))
+        wag = math.sin(fish.phase * 2) * 0.25
+        tail = QPolygonF([QPointF(-L * 0.4, 0), QPointF(-L * (0.7 + 0.2 * fish.tail), -H * (0.5 + wag)),
+                          QPointF(-L * (0.7 + 0.2 * fish.tail), H * (0.5 - wag))])
+        p.drawPolygon(tail)
+        p.drawEllipse(QPointF(0, 0), L / 2, H / 2)
+        p.setBrush(QColor(20, 20, 20, 220))
+        p.drawEllipse(QPointF(L * 0.3, -H * 0.1), max(1.0, H * 0.12), max(1.0, H * 0.12))
+        p.restore()
+
+
+def draw_toys(p, f, world, items):
+    """Игрушки в мире: мяч (кружок с бликом), метка цели (флажок)."""
+    for kind, x, y, r, color in items:
+        x = unwrap(x, f.cam_x, world.width)
+        if abs(x - f.cam_x) > f.half + 1:
+            continue
+        p.save()
+        if kind == "ball":
+            c = QPointF(f.X(x), f.Y(y))
+            p.setPen(QPen(qc(darker(color, 0.4)), max(1.0, 0.012 * f.ppm)))
+            p.setBrush(qc(color))
+            p.drawEllipse(c, r * f.ppm, r * f.ppm)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(255, 255, 255, 120))
+            p.drawEllipse(QPointF(c.x() - r * f.ppm * 0.35, c.y() - r * f.ppm * 0.35), r * f.ppm * 0.3, r * f.ppm * 0.3)
+        elif kind == "target":
+            base = QPointF(f.X(x), f.Y(y))
+            top = QPointF(f.X(x), f.Y(y + 0.7))
+            p.setPen(QPen(QColor(90, 70, 50), max(1.0, 0.025 * f.ppm)))
+            p.drawLine(base, top)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(qc(color))
+            p.drawPolygon(QPolygonF([top, QPointF(top.x() + 0.3 * f.ppm, top.y() + 0.1 * f.ppm),
+                                     QPointF(top.x(), top.y() + 0.2 * f.ppm)]))
+        p.restore()
+
+
+def draw_water(p, f, world, water, t):
+    """Пруды: полупрозрачная вода цвета неба, линия поверхности с мелкой рябью."""
+    pal = world.palette
+    for pond in water.ponds:
+        span = (pond.right - pond.left) % world.width
+        x0 = unwrap(pond.left, f.cam_x, world.width)
+        if x0 + span < f.cam_x - f.half - 1 or x0 > f.cam_x + f.half + 1:
+            if not (x0 - world.width + span >= f.cam_x - f.half - 1 and x0 - world.width <= f.cam_x + f.half + 1):
+                continue
+            x0 -= world.width
+        xs = np.linspace(x0, x0 + span, max(8, int(span * 6)))
+        ys = pond.level + 0.025 * np.sin(xs * 3.1 + t * 2.0) + 0.015 * np.sin(xs * 7.3 - t * 3.1)
+        top = [QPointF(f.X(x), f.Y(y)) for x, y in zip(xs, ys)]
+        bottom = [QPointF(f.X(x), f.Y(world.height_at(x) - 0.05)) for x in xs[::-1]]
+        deep = blend(pal["sky_bottom"], (0.1, 0.25, 0.45), 0.6)
+        g = QLinearGradient(0, f.Y(pond.level), 0, f.Y(pond.bottom))
+        g.setColorAt(0, qc(blend(pal["sky_bottom"], (0.35, 0.6, 0.85), 0.5), 0.55))
+        g.setColorAt(1, qc(deep, 0.8))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(g)
+        p.drawPolygon(QPolygonF(top + bottom))
+        p.setPen(QPen(qc(lighter(pal["sky_bottom"], 0.5), 0.85), max(1.0, 0.025 * f.ppm)))
+        p.drawPolyline(QPolygonF(top))
+
+
 def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thoughts=None, guitar=None,
-               guitar_x=None, chest_x=None):
+               guitar_x=None, chest_x=None, water=None, fish=None, toys=None):
     f = Frame(rect, cam_x, cam_y)
     p.save()
     p.setClipRect(rect)
@@ -674,6 +751,12 @@ def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thou
             head = QPointF(head.x(), head.y() - f.h * 0.05)
         if speech and speech[1] > 0:
             draw_bubble(p, f, head, speech[0], min(1.0, speech[1] / 0.4), colors)
+    if toys:
+        draw_toys(p, f, world, toys)
+    if fish is not None and fish.fish:
+        draw_fish(p, f, world, fish)
+    if water is not None and water.ponds:
+        draw_water(p, f, world, water, t)       # поверх: вброд он по колено в воде
     p.restore()
     return f
 
@@ -772,7 +855,8 @@ def thumbnail(world, body, width, height, colors, t=0.0):
     image = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(QColor(colors["surface"]))
     p = QPainter(image)
-    draw_scene(p, QRectF(0, 0, width, height), world, human, human.px, human.py, t, colors)
+    from world.water import Water
+    draw_scene(p, QRectF(0, 0, width, height), world, human, human.px, human.py, t, colors, water=Water(world))
     if world.width >= RING_MIN:
         strip = QRectF(0, height * 0.8, width, height * 0.2)
         ring_profile(p, strip, world, colors, marker=human.px)
@@ -865,7 +949,9 @@ class WorldView(QWidget):
             thoughts = None
         f = draw_scene(p, rect, life.world, life.human, self.cam_x, self.cam_y, self.clock, self.colors,
                        speech=(life.last_phrase, life.speaking), thoughts=thoughts, guitar=guitar, guitar_x=lying,
-                       chest_x=inv.chest_x if inv is not None else None)
+                       chest_x=inv.chest_x if inv is not None else None, water=getattr(life, "water", None),
+                       fish=getattr(life, "fish", None),
+                       toys=life.toy_visuals() if hasattr(life, "toy_visuals") else None)
         self.vision_rect = None
         if self.show_vision and not getattr(life, "playing", False):
             # раз в кадр, а не на каждый шаг жизни: на x8 это та же цена

@@ -272,8 +272,10 @@ def test_speed_x8_lives_eight_times_faster_in_batches_without_lag(win):
     assert per_frame < 0.03                       # кадр считается быстрее, чем нужен экрану
 
 
-def test_slow_frames_do_not_lose_time_at_x8(win):
-    """Кадр пришёл через 50 мс (окно занято) - шаги не теряются, а досчитываются пачкой."""
+def test_slow_frames_do_not_lose_time_at_x8(win, monkeypatch):
+    """Кадр пришёл через 50 мс (окно занято) - шаги не теряются, а досчитываются пачкой.
+    Бюджет кадра - с запасом: закон о досчёте, а не о скорости машины (она бывает занята)."""
+    monkeypatch.setattr(app_module, "FRAME_BUDGET", 1.0)
     win.show_page("observe")
     obs = win.observe
     obs.set_speed(8)
@@ -315,7 +317,8 @@ def test_gallery_pictures_are_never_squeezed(qapp):
         w.close()
 
 
-def test_x16_lives_sixteen_times_faster_when_frames_keep_up(win):
+def test_x16_lives_sixteen_times_faster_when_frames_keep_up(win, monkeypatch):
+    monkeypatch.setattr(app_module, "FRAME_BUDGET", 1.0)    # «когда кадр успевает»
     win.show_page("observe")
     obs = win.observe
     assert 16 in obs.speed_buttons

@@ -93,7 +93,9 @@ def test_every_guitar_session_ends_by_itself_in_reasonable_time(sometimes):
 
 def test_after_a_session_he_walks_and_later_plays_again(sometimes):
     runs = [r[0] for r in sometimes]
-    assert all(len(out) >= 2 for out in runs), [len(o) for o in runs]
+    # с 2.0 у него есть и мяч, и вода, и нужды: гитаре достаётся меньше; кто-то из пяти может
+    # за полчаса так к ней и не вернуться (замер: 2, 2, 0, 3, 2 сеанса)
+    assert sum(len(out) >= 2 for out in runs) >= 3, [len(o) for o in runs]
     for out in runs:
         for a, b in zip(out, out[1:]):
             assert b["start"] - (a["start"] + a["length"]) >= ch.MIN_WORLD - 1e-6

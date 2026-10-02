@@ -140,3 +140,65 @@ class CurveChart(QWidget):
         p.setPen(pen)
         p.drawPath(path)
         p.end()
+
+
+class NeedsView(QWidget):
+    """Настроение лицом и три нужды полосками: голод, жажда, усталость (0..1)."""
+
+    NAMES = (("hunger", "голод"), ("thirst", "жажда"), ("tired", "усталость"))
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.mood = 0.0
+        self.values = {k: 0.0 for k, _ in self.NAMES}
+        self.colors = theme.palette("dark")
+        self.setMinimumHeight(70)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    def set_state(self, mood, needs):
+        self.mood = float(mood)
+        self.values = {k: float(getattr(needs, k)) for k, _ in self.NAMES}
+        self.update()
+
+    def set_theme(self, name):
+        self.colors = theme.palette(name)
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        c = self.colors
+        h = self.height()
+        r = min(26.0, h / 2 - 4)
+        cx, cy = r + 2, h / 2
+        good = QColor(c["good"]) if self.mood >= 0 else QColor(c["warm"])
+        p.setPen(QPen(good, 2.5))
+        p.setBrush(QColor(c["surface2"]))
+        p.drawEllipse(QPointF(cx, cy), r, r)
+        p.setBrush(good)
+        p.setPen(Qt.PenStyle.NoPen)
+        for dx in (-0.35, 0.35):
+            p.drawEllipse(QPointF(cx + dx * r, cy - 0.25 * r), 2.6, 2.6)
+        mouth = QPainterPath(QPointF(cx - 0.45 * r, cy + 0.3 * r))
+        mouth.quadTo(QPointF(cx, cy + 0.3 * r + 0.5 * r * max(-1.0, min(1.0, self.mood))),
+                     QPointF(cx + 0.45 * r, cy + 0.3 * r))
+        p.setPen(QPen(good, 2.5))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPath(mouth)
+        x0 = cx + r + 12
+        w = self.width() - x0 - 2
+        font = QFont(self.font())
+        font.setPixelSize(11)
+        p.setFont(font)
+        for i, (k, name) in enumerate(self.NAMES):
+            y = 4 + i * (h - 8) / 3
+            v = self.values[k]
+            p.setPen(QColor(c["muted"]))
+            p.drawText(QRectF(x0, y, 72, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, name)
+            bar = QRectF(x0 + 74, y + 4, max(10.0, w - 74), 7)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(c["surface2"]))
+            p.drawRoundedRect(bar, 3, 3)
+            p.setBrush(QColor(c["bad"] if v > 0.75 else c["warm"] if v > 0.5 else c["accent"]))
+            p.drawRoundedRect(QRectF(bar.left(), bar.top(), bar.width() * v, bar.height()), 3, 3)
+        p.end()

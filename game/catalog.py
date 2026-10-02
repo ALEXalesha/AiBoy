@@ -14,11 +14,14 @@ from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QProgressBar, QScrollArea, QVBoxLayout, QWidget
 
 from game import theme
+from game.chart import NeedsView
 from game.ui import Page, button, card, label, plural
 from toys import registry
 
-ACT_TITLES = {"explore": "Гулять"}
-ACT_NOTES = {"explore": "Ходит по миру и сам решает, куда: вперёд, назад, остановиться и осмотреться."}
+ACT_TITLES = {"explore": "Гулять", "swim": "Плавать"}
+ACT_NOTES = {"explore": "Ходит по миру и сам решает, куда: вперёд, назад, остановиться и осмотреться.",
+             "swim": "Учится плавать с нуля: сначала барахтается стоймя, потом плывёт. Никогда не тонет - "
+                     "устал или нахлебался - его выносит на берег."}
 ICON = 96
 
 
@@ -46,6 +49,20 @@ def toy_icon(name, colors):
     if name == "guitar":
         from game.view import draw_guitar
         draw_guitar(p, Frame, (-0.18, -0.12), (0.62, 0.78), 1.0)
+    elif name == "swim":
+        from PySide6.QtGui import QPainterPath
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(colors["accent"]))
+        wave = QPainterPath(QPointF(0, ICON * 0.55))
+        for i in range(4):
+            wave.quadTo(QPointF(ICON * (i + 0.5) / 4, ICON * 0.45), QPointF(ICON * (i + 1) / 4, ICON * 0.55))
+        wave.lineTo(ICON, ICON)
+        wave.lineTo(0, ICON)
+        wave.closeSubpath()
+        p.drawPath(wave)
+        p.setBrush(QColor(colors["text"]))
+        p.drawEllipse(QPointF(ICON * 0.35, ICON * 0.45), 7, 7)
+        p.drawRoundedRect(ICON * 0.42, ICON * 0.47, ICON * 0.35, 8, 4, 4)
     elif name == "explore":
         # холмы и тропинка со следами - «гулять»
         from PySide6.QtGui import QPainterPath, QPen
@@ -128,6 +145,12 @@ class ActivityCard(QWidget):
             self.numbers.setText(f"{text}; сейчас {where}.")
             if self.offer is not None:
                 self.offer.setEnabled(life.inv.where.get("guitar") != "carried" and not life.playing)
+        elif self.name == "swim" and life is not None:
+            sw = life.swim.swimmer
+            deep = bool(life.swim.deep_ponds())
+            state = "уже пловец - глубокая вода ему открыта" if sw.can_swim() else "пока не пловец"
+            self.numbers.setText(f"{sw.attempts} {plural(sw.attempts, 'попытка', 'попытки', 'попыток')}, {state}."
+                                 + ("" if deep else " В этом мире глубокой воды нет."))
         elif self.name == "explore" and life is not None:
             self.numbers.setText(f"Изучено {life.walk.places.explored() * 100:.0f} % мира, "
                                  f"разворотов по своей воле {life.walk.turns}, осмотрелся {life.walk.looks} раз.")
@@ -143,6 +166,16 @@ class CatalogPage(Page):
         outer.addWidget(label("Игрушки из его сундука и занятия. Чем заняться, он выбирает сам - по тому, "
                               "что ему нравится и что уже надоело. Предложить можно; согласится ли - решит он.",
                               "hint", wrap=True))
+        top = card()
+        tl = QHBoxLayout(top)
+        tl.setContentsMargins(theme.PAD, 12, theme.PAD, 12)
+        tl.setSpacing(theme.GAP_BIG)
+        self.needs = NeedsView()
+        self.needs.setMinimumWidth(260)
+        tl.addWidget(self.needs, 2)
+        self.pack = label("", "muted", wrap=True)
+        tl.addWidget(self.pack, 3)
+        outer.addWidget(top)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
@@ -183,6 +216,7 @@ class CatalogPage(Page):
 
     def apply_theme(self, name):
         colors = theme.palette(name)
+        self.needs.set_theme(name)
         for n, c in self.cards.items():
             c.icon.setPixmap(toy_icon(n, colors))
 
@@ -190,6 +224,11 @@ class CatalogPage(Page):
         life = self.life()
         fav = None
         if life is not None:
+            self.needs.set_state(life.choice.mood, life.needs)
+            b = life.backpack
+            self.pack.setText(f"Рюкзак: еды {b.food} {plural(b.food, 'порция', 'порции', 'порций')}, фляга "
+                              f"{round(b.flask * 100)} %, лакомств для собаки {b.treats}. Пополняется у сундука. "
+                              "Есть, пить и отдыхать он идёт сам, когда нужда сильнее, чем тянет играть.")
             acts = {n: a.liking for n, a in life.choice.acts.items() if n in self.cards}
             fav = max(acts, key=acts.get) if acts else None
         for c in self.cards.values():

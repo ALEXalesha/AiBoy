@@ -44,7 +44,7 @@ def test_the_guitar_waits_in_the_chest_and_he_fetches_it_when_he_wants_to_play(m
         assert e != ("pickup",)
     first_choice_now(life)
     life.tick()
-    assert life.seeking is not None and life.walk.pulls.get("гитара") == 1.0
+    assert life.seeking is not None and life.walk.goal == pytest.approx(life.inv.chest_x)
     assert life.walk.places.marks["гитара"] == pytest.approx(life.inv.chest_x)
     events = []
     for _ in range(60 * 60):

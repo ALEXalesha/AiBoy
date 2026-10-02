@@ -57,7 +57,64 @@ def save(life):
             ok = False
     for j in life.toy_journals.values():
         ok = j.save() and ok
-    return ok
+    return save_dog(life) and ok
+
+
+def dog_paths(world_seed):
+    """Собака живёт в своём мире: worlds/<зерно мира>/dog.json и её сети."""
+    base = ("worlds", str(int(world_seed)))
+    return (paths.user_file(*base, "dog.json"), paths.user_file(*base, "dog_motor.npz"),
+            paths.user_file(*base, "dog_fetch.npz"))
+
+
+def load_dog(world_seed):
+    """(состояние, сеть движения, сеть «принести») собаки мира или None, если её тут не было.
+    Битые сети - с нуля (состояние остаётся), битое состояние - как не было."""
+    from animals.dog import motor as dog_motor
+    from animals.dog.dog import Dog  # noqa: F401  (проверка, что модуль цел)
+    jp, mp, fp = dog_paths(world_seed)
+    try:
+        with open(jp, encoding="utf-8") as f:
+            state = json.load(f)
+        if not isinstance(state, dict):
+            return None
+    except (OSError, ValueError):
+        return None
+    motor = fetch = None
+    try:
+        motor = dog_motor.DogMotor(seed=int(world_seed) % (2 ** 31)).load(mp)
+    except Exception:  # noqa: BLE001
+        motor = None
+    try:
+        from acts.policy import ChoicePolicy
+        from animals.dog.dog import FETCH_CHOICES
+        fetch = ChoicePolicy(3, len(FETCH_CHOICES), hidden=8, seed=int(world_seed) % (2 ** 31) + 3, lr=8e-2, entropy=0.05)
+        fetch.load(fp)
+    except Exception:  # noqa: BLE001
+        fetch = None
+    return state, motor, fetch
+
+
+def save_dog(life):
+    if life.dog is not None:
+        state, motor, fetch = life.dog.to_dict(), life.dog.motor, life.dog.fetch
+    elif life.dog_saved:
+        state, motor, fetch = life.dog_saved
+    else:
+        return True
+    jp, mp, fp = dog_paths(life.world_seed)
+    try:
+        tmp = jp + ".tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(state, f, ensure_ascii=False)
+        os.replace(tmp, jp)
+        if motor is not None:
+            motor.save(mp)
+        if fetch is not None:
+            fetch.save(fp)
+    except OSError:
+        return False
+    return True
 
 
 def toy_path(body_seed, name):
@@ -69,7 +126,9 @@ def load_toys(body_seed):
     out = {}
     from toys import registry
     from toys.ball import BallHeads
-    makers = [("ball", lambda: BallHeads(seed=int(body_seed) % (2 ** 31)))]
+    from animals.dog.session import TameHeads
+    makers = [("ball", lambda: BallHeads(seed=int(body_seed) % (2 ** 31))),
+              ("dog", lambda: TameHeads(seed=int(body_seed) % (2 ** 31)))]
     for name in registry.INPLACE:
         heads_cls = registry.inplace(name)[0]
         makers.append((name, lambda c=heads_cls: c(seed=int(body_seed) % (2 ** 31))))

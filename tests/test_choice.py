@@ -68,6 +68,15 @@ def test_often_is_longer_and_stronger_than_rare():
     assert rare.acts["guitar"].half == often.acts["guitar"].half and rare.acts["ball"].half == often.acts["ball"].half
 
 
+def test_liking_of_toys_added_later_survives_a_save():
+    """Игрушки и собаку жизнь добавляет после загрузки выбора - их «нравится» не теряется."""
+    c = Choice()
+    c.add("ball", 5.0).liking = 0.83
+    c.add("dog", 5.0).boredom = 0.4
+    d = Choice().load(c.to_dict())
+    assert d.add("ball", 5.0).liking == 0.83 and d.add("dog", 5.0).boredom == 0.4
+
+
 def test_pleasure_counts_success_growth_and_the_owner():
     assert pleasure(0.8, [0.2] * 20) > pleasure(0.8, [0.8] * 20) > pleasure(0.2, [0.8] * 20)
     assert pleasure(0.5, [], owner=1) > pleasure(0.5, []) > pleasure(0.5, [], owner=-1)

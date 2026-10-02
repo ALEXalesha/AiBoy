@@ -34,6 +34,8 @@ from world.food import Food
 from world.fish import School
 from toys import registry as toy_registry
 from world.water import Water
+from animals.dog import spawn as dog_spawn
+from animals.dog.dog import DogCtx
 from music.session import FPS
 from world.generate import generate
 
@@ -58,10 +60,29 @@ OFFER_NEAR = 0.6           # м - предложенную кладут рядо
 SEEK_MAX = 90.0            # с - столько идёт к положенной гитаре, потом решает заново
 
 
+class LifeDogCtx(DogCtx):
+    """Что собака знает в жизни: мир, вода, физика, он, мяч; мяч в зубах - в сундучном учёте."""
+
+    def __init__(self, life):
+        super().__init__(life.world, life.physics(), life.water)
+        self.life = life
+
+    def take_ball(self):
+        if not super().take_ball():
+            return False
+        self.life.inv.where["ball"] = "dog"
+        return True
+
+    def drop_ball(self, x, y):
+        self.phys.add_ball("мяч", x, y, radius=self.life.ball_radius(), mass=0.4)
+        self.life.inv.where["ball"] = float(x)
+
+
 class Life:
     def __init__(self, models, world_seed, body_seed, width, brain, frequency="normal", seed=None,
                  guitarist=None, has_guitar=False, guitar_freq="sometimes", choice=None, navigator=None,
-                 needs=None, backpack=None, food_prefs=None, swimmer=None, toy_heads=None, chest=None):
+                 needs=None, backpack=None, food_prefs=None, swimmer=None, toy_heads=None, chest=None,
+                 dog_mode="never", dog_saved=None):
         self.models = models
         self.world_seed, self.body_seed = int(world_seed), int(body_seed)
         self.world = generate(models.world_genome, world_seed, width)
@@ -144,6 +165,25 @@ class Life:
         self.swim = Swim(self, swimmer if swimmer is not None else Swimmer(seed=int(body_seed) % (2 ** 31)))
         self.human.can_swim = self.swim.swimmer.can_swim()
         self.swim_flags = {}
+        self.seek_for = None                   # за мячом идёт, чтобы играть с собакой
+        self._pending = []                     # события собаки - в ответ tick()
+        # собака (animals/dog): есть ли в мире - по настройке и настроению; ручная из сохранения -
+        # сразу рядом. dog_saved - (состояние, сеть движения, сеть «принести») собаки этого мира
+        self.choice.add("dog", 5.0)
+        self.dog = None
+        self.dog_mode = dog_mode
+        self.dog_saved = dog_saved
+        self.dog_rng = np.random.default_rng([int(world_seed), int(body_seed), 13])
+        self.dog_ctx = None
+        self.dog_stay = 0.0
+        self.dog_clock = 0.0
+        self.dog_flags = {}
+        self.dog_landed = -10.0
+        self.dog_shook = False
+        tamed = bool(dog_saved and isinstance(dog_saved[0], dict) and dog_saved[0].get("tamed"))
+        chance = dog_spawn.world_chance(dog_mode, self.choice.mood)
+        if dog_mode in dog_spawn.MODES and dog_mode != "never" and (tamed or (chance > 0 and self.dog_rng.random() < chance)):
+            self.spawn_dog(near=tamed)
 
     # где гитара: у него, в сундуке или на земле (toys/chest.py)
     @property
@@ -216,6 +256,13 @@ class Life:
         self.music_flags = {}
 
     def tick(self):
+        events = self._tick()
+        if self._pending:
+            events = list(events) + self._pending
+            self._pending = []
+        return events
+
+    def _tick(self):
         if self.stopped:
             return []
         self._needs_tick()
@@ -379,12 +426,113 @@ class Life:
                 pwater.apply(body, "box", (bb.right - bb.left, bb.top - bb.bottom), level, dt)
 
     def _phys_tick(self):
-        if self.phys is not None and (self.phys.things or self.phys.frozen):
+        if self.dog is None and self.dog_mode != "never":
+            self.dog_clock += DT
+            if self.dog_clock >= 60.0:               # собака может прийти и потом
+                self.dog_clock = 0.0
+                if self.dog_rng.random() < dog_spawn.minute_chance(self.dog_mode, self.choice.mood):
+                    self.spawn_dog()
+        if self.phys is not None and (self.phys.things or self.phys.frozen or self.dog is not None):
             self.phys.follow(self.human.px)
+            if self.dog is not None:
+                self._dog_tick()
             self.phys.step(DT)
+
+    # --- собака ---
+    def ball_radius(self):
+        from toys import base as toy_base
+        from toys.ball import BALL_R
+        _, _, prop = toy_base.look(self.body_seed, toy_registry.names().index("ball"))
+        return BALL_R[0] + (BALL_R[1] - BALL_R[0]) * prop
+
+    def spawn_dog(self, near=False):
+        """Собака приходит: ручная - рядом, неручная - поодаль, на суше."""
+        from animals.dog.dog import Dog
+        h = self.human
+        side = 1 if self.dog_rng.random() < 0.5 else -1
+        x = h.px + side * float(self.dog_rng.uniform(2.5, 4.0) if near else self.dog_rng.uniform(14.0, 22.0))
+        for _ in range(60):
+            if self.water.depth_at(x) <= 0.0:
+                break
+            x += side * 0.5
+        phys = self.physics()
+        phys.follow(h.px)
+        state, motor, fetch = self.dog_saved if self.dog_saved else ({}, None, None)
+        self.dog = Dog(self.world_seed, phys, x, rng=np.random.default_rng(self.dog_rng.integers(2 ** 31)),
+                       motor=motor, fetch=fetch, facing=-side).load(state)
+        self.dog_ctx = LifeDogCtx(self)
+        self.dog_stay = dog_spawn.stay_minutes(self.dog.trust, self.dog_rng) * 60.0
+        self._pending.append(("dog_came", self.dog.tamed))
+        return self.dog
+
+    def dog_gone(self):
+        """Неручная ушла совсем; её память остаётся миру - может вернуться та же."""
+        d = self.dog
+        if d.carrying:
+            self.inv.where["ball"] = float(d.x)
+        self.dog_saved = (d.to_dict(), d.motor, d.fetch)
+        d.remove()
+        self.dog = None
+        self.dog_ctx = None
+        self.dog_flags = {}
+        if self.toy is not None and self.toy.name == "dog":
+            self.toy.stop()
+        self._pending.append(("dog_left",))
+
+    def _dog_tick(self):
+        dog, ctx, h = self.dog, self.dog_ctx, self.human
+        ctx.time = self.time
+        ctx.person = (h.px, h.vx)
+        b = self.phys.body("мяч")
+        ctx.ball = (float(b.position.x), float(b.position.y), float(b.velocity.length)) if b is not None else None
+        if (b is not None and not dog.tamed and b.velocity.y < -2.0 and abs(dog.dist(float(b.position.x))) < 1.5
+                and self.time - self.dog_landed > 2.0):
+            self.dog_landed = self.time
+            dog.ball_landed_near(float(b.position.x))      # мячом в неё - пугается
+        ctx.events = []
+        was_tamed = dog.tamed
+        dog.tick(DT, ctx)
+        size = dog.look.length
+        for e in ctx.events:
+            kind = e[0]
+            if kind == "dog_brought":
+                treat = self.backpack.treats > 0
+                if treat:
+                    self.backpack.treats -= 1
+                dog.praised(treat)
+                self.dog_flags = {"dog_brought": 1.0}
+                self._pending.append(("sound", "bark", 0.7, size))
+            elif kind == "dog_grab":
+                self._pending.append(("sound", "bark", 0.4, size))
+            elif kind == "dog_treat":
+                self._pending.append(("sound", "treat", 0.5, 0.05))
+            if self.toy is not None and hasattr(self.toy, "dog_event"):
+                self.toy.dog_event(kind)
+            self._pending.append(e)
+        if dog.tamed and not was_tamed:
+            self.dog_flags = {"dog_tamed": 1.0}
+            self._pending.append(("sound", "bark", 0.8, size))
+            self._pending.append(("phrase", self.say()))
+        if dog.body.shake > 0 and not self.dog_shook:
+            self._pending.append(("sound", "shake", 0.6, size))
+        self.dog_shook = dog.body.shake > 0
+        if not dog.tamed and not dog.leaving:
+            self.dog_stay -= DT
+            if self.dog_stay <= 0:
+                dog.leaving = True                       # не приручили - уходит
+        if dog.leaving and dog.free_x is not None and abs(dog.dist(h.px)) > dog_spawn.GONE:
+            self.dog_gone()
 
     def make_session(self, name):
         from toys import base as toy_base
+        if name == "dog":
+            if self.dog is None:
+                return None
+            from animals.dog.session import DogSession, TameHeads
+            heads = self.toy_heads.setdefault("dog", TameHeads(seed=int(self.body_seed) % (2 ** 31)))
+            if "dog" not in self.toy_journals:
+                self.toy_journals["dog"] = toy_base.journal(self.body_seed, "dog")
+            return DogSession(self, heads, self.toy_journals["dog"])
         if name == "ball":
             from toys.ball import BALL_R, BallHeads, BallSession
             heads = self.toy_heads.setdefault("ball", BallHeads(seed=int(self.body_seed) % (2 ** 31)))
@@ -421,6 +569,9 @@ class Life:
             b = self.phys.body("мяч") if self.phys is not None else None
             if b is not None:
                 out.append(("ball", float(b.position.x), float(b.position.y), r, c1))
+            elif where == "dog" and self.dog is not None:
+                hx, hy = self.dog.body.head() if self.dog.free_x is None else (self.dog.x, self.dog.y)
+                out.append(("ball", hx + self.dog.body.facing * 0.08, hy - 0.04, r, c1))
             elif where == "carried":
                 pts = self.human.points()
                 hx, hy = pts["ha_r" if self.human.facing > 0 else "ha_l"]
@@ -498,6 +649,10 @@ class Life:
              "tired": 1.0 if n.tired > 0.6 else 0.0}
         f.update(self.daily.flags)
         f.update(self.swim_flags)
+        if self.dog is not None:
+            f["dog_near"] = 1.0 if abs(self.dog.dist(self.human.px)) < 8.0 else 0.0
+            f["dog_tame"] = 1.0 if self.dog.tamed else 0.0
+            f.update(self.dog_flags)
         return f
 
     # --- гитара ---
@@ -513,9 +668,11 @@ class Life:
                 continue
             if t.needs == "water" and not self.water.ponds:
                 continue                         # удочка - только где есть вода
-            if self.inv.where[t.name] == "flying":
+            if self.inv.where[t.name] in ("flying", "dog"):
                 continue
             acts.append(t.name)
+        if self.dog is not None and not self.dog.leaving:
+            acts.append("dog")                   # приручать или играть с ней - только когда она есть
         return acts
 
     def _world_guitar(self, events):
@@ -527,10 +684,14 @@ class Life:
                 name, self.seek_toy = self.seek_toy, None
                 self.walk.goal = None
                 events.append(("pickup_toy", name))
-                self.start_toy(name, events)
+                if self.seek_for == "dog":
+                    self.seek_for = None
+                    self.start_toy("dog", events)      # взял мяч - играть с собакой
+                else:
+                    self.start_toy(name, events)
                 return
             if self.time - self.seek_since > SEEK_MAX:
-                self.seek_toy = None
+                self.seek_toy = self.seek_for = None
                 self.walk.goal = None
                 self.choice.switch("explore")
             return
@@ -551,6 +712,18 @@ class Life:
                 and self.human.grounded and self.human.fallen <= 0 and not self.walk.looking):
             self.decide_clock = 0.0
             pick = self.choice.choose(self.available(), self.needs.urgency())
+            if pick == "dog":
+                ball = self.inv.where.get("ball")
+                if self.dog.tamed and ball is not None and ball not in ("carried", "flying", "dog"):
+                    # играть с ручной - сначала взять мяч
+                    if self.inv.carried is not None:
+                        events.append(("put_toy", self.inv.carried))
+                        self.put_held()
+                    self.seek_toy, self.seek_for, self.seek_since = "ball", "dog", self.time
+                    self.walk.goal = self.inv.position("ball")
+                    return
+                self.start_toy("dog", events)
+                return
             if pick in toy_registry.TOYS and pick != "guitar":
                 held = self.inv.carried
                 if held == pick:

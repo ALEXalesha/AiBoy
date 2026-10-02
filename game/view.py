@@ -663,6 +663,91 @@ def draw_fish(p, f, world, school):
         p.restore()
 
 
+def draw_dog(p, f, world, v):
+    """Собака: дальние ноги темнее, туловище с пятнами, хвост, голова с ушами и мордой; в зубах -
+    мяч (его рисуют игрушки); отряхивается - брызги. Вид - из сети собак (animals/dog/look.py)."""
+    if v is None:
+        return
+    lk = v["look"]
+    corners = v["corners"]
+    cx = sum(c[0] for c in corners) / 4
+    shift = unwrap(cx, f.cam_x, world.width) - cx
+    if abs(cx + shift - f.cam_x) > f.half + 2:
+        return
+    def P(pt):
+        return QPointF(f.X(pt[0] + shift), f.Y(pt[1]))
+    L = lk.length
+    lw = max(1.5, 0.07 * L * f.ppm)
+    body = qc(lk.color)
+    dark = qc(darker(lk.color, 0.35))
+    legs = v["legs"]
+    p.save()
+    for i in (1, 3):                                     # дальние ноги
+        hip, knee, paw, _ = legs[i]
+        p.setPen(QPen(dark, lw, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        p.drawPolyline(QPolygonF([P(hip), P(knee), P(paw)]))
+    # хвост от заднего верхнего угла
+    fx = v["facing"]
+    back = max(corners, key=lambda c: -fx * c[0] + c[1] * 0.3)
+    wag = math.sin(f.cam_x * 0.0 + v.get("t", 0.0) * 9.0) * 0.15
+    tail_len = (0.15 + 0.35 * lk.tail) * L
+    up = 0.4 + 1.0 * lk.curl
+    tip = (back[0] - fx * tail_len * math.cos(up + wag), back[1] + tail_len * math.sin(up + wag))
+    mid = (back[0] - fx * tail_len * 0.6, back[1] + tail_len * (0.2 + 0.5 * lk.curl))
+    path = QPainterPath(P(back))
+    path.quadTo(P(mid), P(tip))
+    p.setPen(QPen(body, lw * 0.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPath(path)
+    # туловище
+    p.setPen(QPen(dark, max(1.0, 0.012 * f.ppm)))
+    p.setBrush(body)
+    poly = QPainterPath()
+    poly.addPolygon(QPolygonF([P(c) for c in corners]))
+    p.drawPath(poly)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(qc(lk.spots, 0.85))
+    a = v["angle"]
+    for k in range(int(1 + 3 * lk.ears * lk.tail)):     # пятна - сколько и где, по виду
+        u = -0.3 + 0.25 * k
+        sx = cx + fx * u * L * math.cos(a)
+        sy = sum(c[1] for c in corners) / 4 + 0.04 * L + fx * u * L * math.sin(a)
+        p.drawEllipse(QPointF(f.X(sx + shift), f.Y(sy)), 0.09 * L * f.ppm, 0.06 * L * f.ppm)
+    # ближние ноги
+    for i in (0, 2):
+        hip, knee, paw, _ = legs[i]
+        p.setPen(QPen(body, lw, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        p.drawPolyline(QPolygonF([P(hip), P(knee), P(paw)]))
+    # шея и голова
+    front = max(corners, key=lambda c: fx * c[0] + c[1] * 0.3)
+    hx, hy = v["head"]
+    hr = 0.17 * L
+    p.setPen(QPen(body, lw * 1.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+    p.drawLine(P(front), P((hx, hy)))
+    p.setPen(QPen(dark, max(1.0, 0.01 * f.ppm)))
+    p.setBrush(body)
+    p.drawEllipse(P((hx, hy)), hr * f.ppm, hr * 0.85 * f.ppm)
+    p.drawEllipse(P((hx + fx * hr * 0.9, hy - hr * 0.25)), hr * 0.6 * f.ppm, hr * 0.38 * f.ppm)   # морда
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(25, 20, 20))
+    p.drawEllipse(P((hx + fx * hr * 1.45, hy - hr * 0.2)), hr * 0.14 * f.ppm, hr * 0.12 * f.ppm)   # нос
+    p.drawEllipse(P((hx + fx * hr * 0.35, hy + hr * 0.2)), hr * 0.12 * f.ppm, hr * 0.12 * f.ppm)   # глаз
+    p.setBrush(dark)
+    if lk.ears < 0.5:                                    # торчком
+        ear = [(hx - fx * hr * 0.2, hy + hr * 0.6), (hx - fx * hr * 0.55, hy + hr * 1.5), (hx - fx * hr * 0.65, hy + hr * 0.4)]
+        p.drawPolygon(QPolygonF([P(e) for e in ear]))
+    else:                                                # висячие
+        p.drawEllipse(P((hx - fx * hr * 0.45, hy - hr * 0.1)), hr * 0.3 * f.ppm, hr * 0.62 * f.ppm)
+    if v.get("shake", 0.0) > 0:
+        p.setBrush(QColor(170, 210, 255, 200))
+        for k in range(10):
+            ang = k * 0.63 + v["shake"] * 7.0
+            r = (0.3 + 0.25 * ((k * 7) % 3)) * L
+            p.drawEllipse(QPointF(f.X(cx + shift + r * math.cos(ang)), f.Y(hy - 0.1 + 0.6 * r * math.sin(ang))),
+                          0.012 * f.ppm, 0.012 * f.ppm)
+    p.restore()
+
+
 def draw_toys(p, f, world, items):
     """Игрушки в мире: мяч (кружок с бликом), метка цели (флажок)."""
     for kind, x, y, r, color in items:
@@ -791,7 +876,7 @@ def draw_water(p, f, world, water, t):
 
 
 def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thoughts=None, guitar=None,
-               guitar_x=None, chest_x=None, water=None, fish=None, toys=None):
+               guitar_x=None, chest_x=None, water=None, fish=None, toys=None, dog=None):
     f = Frame(rect, cam_x, cam_y)
     p.save()
     p.setClipRect(rect)
@@ -811,6 +896,9 @@ def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thou
         draw_chest(p, f, world, chest_x)
     if guitar_x is not None:
         guitar_lying(p, f, world, guitar_x)
+    if dog is not None:
+        dog = dict(dog, t=t)
+        draw_dog(p, f, world, dog)
     if human is not None:
         # тень под ногами
         gy = world.height_at(human.px)
@@ -1026,7 +1114,8 @@ class WorldView(QWidget):
                        speech=(life.last_phrase, life.speaking), thoughts=thoughts, guitar=guitar, guitar_x=lying,
                        chest_x=inv.chest_x if inv is not None else None, water=getattr(life, "water", None),
                        fish=getattr(life, "fish", None),
-                       toys=life.toy_visuals() if hasattr(life, "toy_visuals") else None)
+                       toys=life.toy_visuals() if hasattr(life, "toy_visuals") else None,
+                       dog=life.dog.visuals() if getattr(life, "dog", None) is not None else None)
         self.vision_rect = None
         if self.show_vision and not getattr(life, "playing", False):
             # раз в кадр, а не на каждый шаг жизни: на x8 это та же цена

@@ -59,5 +59,6 @@ def summarize(human, world, want_dir, want_jump, curiosity, fell, music=None):
     s[IDX["night"]] = 1.0 if getattr(world, "night", False) else 0.0
     s[IDX["facing"]] = human.facing
     for k, v in (music or {}).items():
-        s[IDX[k]] = v
+        if k in IDX:                 # флаг, которого речь ещё не знает (собака до переобучения), - мимо
+            s[IDX[k]] = v
     return s

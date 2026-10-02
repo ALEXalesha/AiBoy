@@ -240,7 +240,15 @@ def test_gallery_cards_have_room_to_breathe(qapp, minimal):
         if minimal:
             w.resize(w.minimumSize())
         w.show_page("gallery")
-        QTest.qWait(30)
+        # раскладка карточек доходит не за один проход событий: мерить, когда два замера подряд
+        # совпали (не дольше 2 с) - фиксированные 30 мс под нагрузкой мерили недоложенное (1 из 3)
+        prev, deadline = None, time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            QTest.qWait(30)
+            now = [card_gaps(c) for c in w.gallery_page.cards.values()]
+            if now == prev:
+                break
+            prev = now
         assert len(w.gallery_page.cards) == 4
         for card in w.gallery_page.cards.values():
             gaps, pads = card_gaps(card)

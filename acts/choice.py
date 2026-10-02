@@ -82,6 +82,7 @@ class Choice:
         self.attempts = 0            # попыток подряд в текущем
         self.since = 0.0             # с в текущем
         self.mood = 0.0              # -1..1
+        self._pending = {}           # сохранённое для занятий, которых ещё нет (игрушки, собака)
         self.freq = freq
         self.add("guitar", HALF["sometimes"])
         for n in NEEDS:
@@ -109,7 +110,16 @@ class Choice:
             self.acts[name] = a
             a.half = half_min * HALF[self.freq] / HALF["sometimes"]
             a.bias = BIAS[self.freq] if bias is None else bias
+            self._restore(name, self._pending.pop(name, None))
         return self.acts[name]
+
+    def _restore(self, name, v):
+        if not isinstance(v, dict):
+            return
+        for k in ("liking", "boredom"):
+            x = v.get(k)
+            if isinstance(x, (int, float)) and not isinstance(x, bool) and 0.0 <= x <= 1.0:
+                setattr(self.acts[name], k, float(x))
 
     # --- время и удовольствие ---
     def tick(self, dt):
@@ -185,11 +195,12 @@ class Choice:
         if not isinstance(d, dict):
             return self
         for n, v in (d.get("acts") or {}).items():
-            if n in self.acts and isinstance(v, dict):
-                for k in ("liking", "boredom"):
-                    x = v.get(k)
-                    if isinstance(x, (int, float)) and not isinstance(x, bool) and 0.0 <= x <= 1.0:
-                        setattr(self.acts[n], k, float(x))
+            if n in self.acts:
+                self._restore(n, v)
+            elif isinstance(n, str):
+                # игрушки и собаку жизнь добавляет позже: их «нравится» и скука ждут add()
+                # (замер: до 2.0 они терялись при каждом запуске)
+                self._pending[n] = v
         m = d.get("mood")
         if isinstance(m, (int, float)) and not isinstance(m, bool) and -1.0 <= m <= 1.0:
             self.mood = float(m)

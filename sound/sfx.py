@@ -104,7 +104,33 @@ def chain(force=1.0, size=0.1, seed=8):
     return (0.2 * force * x).astype(np.float32)
 
 
-SOUNDS = {"scratch": scratch, "chain": chain, "kick": thump, "throw": whoosh, "bounce": bounce, "catch": slap, "land": thump, "clack": clack,
+def bark(force=1.0, size=0.6, seed=9):
+    """Лай: короткий тон с падающей высотой и хрипотцой; больше собака - ниже."""
+    n = int(0.16 * SR)
+    t = np.arange(n) / SR
+    f0 = 900 - 650 * min(1.0, max(0.0, (size - 0.4) / 0.5))
+    f = f0 * (1.0 - 0.35 * t / t[-1])
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    x = (np.sin(ph) + 0.4 * np.sin(2 * ph) + 0.3 * _lowpass(_noise(n, seed), 0.4)) * _env(n, attack=0.004, decay=0.05)
+    return (0.4 * force * x).astype(np.float32)
+
+
+def shake(force=1.0, size=0.6, seed=10):
+    """Отряхивается: брызги, быстро дрожащий шум."""
+    n = int(0.6 * SR)
+    t = np.arange(n) / SR
+    x = _lowpass(_noise(n, seed), 0.3) * (0.5 + 0.5 * np.sin(2 * np.pi * 18 * t)) * _env(n, attack=0.02, decay=0.25)
+    return (0.3 * force * x).astype(np.float32)
+
+
+def crunch(force=1.0, size=0.05, seed=11):
+    """Хрустит лакомством."""
+    n = int(0.15 * SR)
+    x = _lowpass(_noise(n, seed), 0.6) * _env(n, attack=0.001, decay=0.02)
+    return (0.3 * force * x).astype(np.float32)
+
+
+SOUNDS = {"bark": bark, "shake": shake, "treat": crunch, "scratch": scratch, "chain": chain, "kick": thump, "throw": whoosh, "bounce": bounce, "catch": slap, "land": thump, "clack": clack,
           "fall": thump, "splash": splash, "whoosh": whoosh, "pop": pop}
 
 

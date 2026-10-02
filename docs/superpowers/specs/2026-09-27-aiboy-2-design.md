@@ -138,6 +138,12 @@ For every learned skill the plan measures and records attempts to a visible impr
 - **Swimming as an activity.** He chooses it himself when he likes it (see 10).
 - **Safety.** He never drowns. If he is in deep water and tired, or the swim is failing, he
   floats and is carried to the nearest shore within 5 s; the chat comments on it.
+- **Diving mask** (added 2026-10-02, a toy in the chest). When he wants to stay in the water
+  long (interest in the fish, the bottom, diving), he takes the mask from the chest. With it he
+  breathes under water and stays down much longer. The safety above respects it: without the
+  mask the limit is 2.5 s with the head under water, with the mask much longer but still finite
+  (his air and swim tiredness). Using it well is learned like the other toys (a head, a skill, a
+  sound, a journal): diving deeper, looking at fish close. Chosen by interest (10).
 - **Fish:**
   - a fish network from the pond seed gives shape and colour;
   - they swim in simple patterns;
@@ -190,6 +196,9 @@ The look of the toys comes from a toy network by the chest seed.
 | Boomerang | throw angle, force, spin | how close it returned; a caught return counts double | whoosh, catch |
 | Marker | stroke path (a small stroke GRU, a mini sketch-rnn) | beauty: his taste net + 👍 | scratch |
 | Fishing rod | cast angle and force, when to pull after a bite | fish caught | cast, splash, reel |
+| Rope with a hook (added 2026-10-02) | where to throw the hook on a steep face, when to pull himself up | height gained on the face, hook held | throw, clink, rope creak |
+| Ice axe / climbing pick (added 2026-10-02) | where and how hard to strike, when to move the feet | height gained, holds that held | strike, scrape |
+| Diving mask (added 2026-10-02) | how deep and how long to dive, where to look (fish, bottom) | time and depth under water, fish seen close | splash, bubbles |
 
 - **Drawings** stay where they were made until the world changes. All drawings go to the
   Gallery ("Рисунки"); caught fish go there too ("Улов").
@@ -244,6 +253,53 @@ gives or what it finds, and sits or lies down, sometimes next to him.
 - the dog never gets stuck: the reachability graph for its body;
 - trust grows under patient approach and falls under running at it;
 - a tamed dog brings the ball back more often after N throws than at the start.
+
+## 8a. Mountains, climbing and the summit flag (added 2026-10-02, Alexey's request)
+
+Alexey: «чтобы если ему стало интересно он мог бы либо по простому пути пройти гору либо
+поучиться и забраться с помощью рук или инструментов на гору и порадоваться в случае успеха
+если ему будет интересно».
+
+**Mountains.** Real mountains in the 1280 m worlds (and maybe 640): peaks of about 60-100 m,
+well above the ±14 m macro ridges.
+- Every mountain has an **easy route**: a gentle walkable path or pass. The existing "no traps,
+  walkable" law still holds through this route.
+- It also has a **steep face** or cliff that can't be walked, only climbed.
+- An extension of `world/macro.py` (evolved like macro relief and water); the existing sizes
+  stay byte-identical. Snow at the tops is optional and visual only.
+
+**Choice by interest** through the same `acts/choice.py`:
+- when he notices a mountain, climbing becomes an activity that competes with the others
+  (novelty and interest, his boredom, needs, tiredness);
+- he may ignore it, take the easy route, or try the steep face;
+- a new mountain is interesting, one he has already conquered much less so;
+- tired, hungry, or scared after falls, he takes the easy route or does something else.
+
+**Climbing is learned from zero**, like swimming: `skills/climb.py` on the same base (own
+experience plus REINFORCE).
+- The hands find holds (the reach skill), the feet push.
+- At first he slips and slides down safely; over attempts the success grows. The learning
+  curve is measured and recorded, like swimming and reach.
+- **Tools** are toys in the chest (registry): a rope with a hook and an ice axe / climbing
+  pick. They make the steep face easier, but using them is learned too (a head and a skill
+  per tool). He takes a tool from the chest when he wants to climb.
+
+**Safety**, like swimming: he never dies or gets stuck.
+- A fall from a height is softened: he slides down, says «ой», gets a little tired, no damage.
+- Fear (caution) grows after falls and fades with successes.
+- Stuck for N seconds - he climbs down or walks around.
+
+**Joy at the top:**
+- the first time on a summit he **plants a flag** there. The flag stays in the world (saved with
+  the world), is seen from afar and flutters in the wind; conquered peaks are known by their
+  flags;
+- then a visible celebration (arms up or a jump, a happy face on the panel);
+- a speech line («я залез!», «ура, вершина!»): speech flags and teacher phrases; the retraining
+  joins the general one;
+- a sound;
+- the summit goes to place memory;
+- the mood rises, so the dog and the birds (8, 9) react to it;
+- the summit and the climb count in «Каталог» / «Статистика».
 
 ## 9. Birds
 
@@ -370,6 +426,9 @@ networks; the mood only sets their spawn rates within the settings.
 - a body in water floats by its share.
 
 **Water and swimming:**
+- without the diving mask the underwater limit of 2.5 s holds; with the mask he stays under much
+  longer and still never drowns (the limit is his air and tiredness, finite); he takes the mask
+  only when he wants a long swim (fish, the bottom, diving);
 - water never above its spill height;
 - no unreachable-deep water on his path before he can swim;
 - he never drowns: back on shore within 5 s;
@@ -389,6 +448,16 @@ above the first 20 by a margin. N and the margin are measured in the plan.
 - it never gets stuck;
 - it sits and lies when tired;
 - it swims.
+
+**Mountains and climbing:**
+- the easy route is always walkable; the steep face can't be walked, only climbed;
+- climbing success grows with attempts (the curve in the plan); tools raise the success;
+- interest drives the choice: a new mountain is tried more often than a conquered one;
+  tiredness or fear - the easy route;
+- no death and no getting stuck (stress test);
+- the flag, the celebration and the speech flag happen exactly at a summit: one flag per
+  conquered summit, it survives save and load, no flag without a real summit;
+- the frame budget at x8 in 1280 still holds.
 
 **Birds:**
 - the flight network holds height better after training than before;
@@ -453,6 +522,8 @@ frame budget; the real speed at x16 in the same world is measured and recorded.
    - bicycle;
    - marker.
 5. The dog: body, movement learning, behaviour, needs, taming, fetch with the ball.
+5a. Mountains (easy route and steep face), climbing from zero with tools (rope with a hook,
+    ice axe), the summit flag and the joy; the diving mask (added 2026-10-02).
 6. Birds: flight learning, fleeing, reactions.
 7. «Попытки», «Статистика», «Галерея» for everything; speech retrained.
 8. Release 2.0.0:

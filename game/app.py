@@ -262,7 +262,8 @@ class ObservePage(Page):
         self.life = Life(w.models, world_seed, body_seed, width, w.brain, frequency=w.settings.phrase_freq,
                          navigator=w.navigator, guitarist=g, guitar_freq=w.settings.guitar_freq,   # гитара - в сундуке
                          choice=choice, needs=needs, backpack=pack, food_prefs=prefs, swimmer=swimmer,
-                         toy_heads=life_store.load_toys(body_seed))
+                         toy_heads=life_store.load_toys(body_seed),
+                         dog_mode=w.settings.dog, dog_saved=life_store.load_dog(world_seed))
         self.show_guitar(False)
         self.refresh_put()
         self.counted_time = self.counted_dist = 0.0

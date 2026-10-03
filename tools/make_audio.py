@@ -9,6 +9,12 @@
 к каждой попытке добавлена сама мелодия, сыгранная точно по нотам (после паузы) - чтобы
 было с чем сравнить на слух. Печатает для каждой: A, пик (перегруза нет - меньше 1),
 длительность.
+
+    python tools\\make_audio.py --events
+
+2.0: звуки событий мира (sound/sfx) - три файла по сценам: собака (лай, отряхивается, хрустит
+лакомством), гора (карабин, ледоруб, съехал, фанфары и флаг на вершине), вода и небо (пузыри
+под маской, крылья, щебет).
 """
 import argparse
 import os
@@ -19,7 +25,7 @@ import wave
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 for v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
-    os.environ.setdefault(v, "4")
+    os.environ.setdefault(v, "2")
 
 import numpy as np  # noqa: E402
 
@@ -63,13 +69,48 @@ def write_wav(path, samples):
         w.writeframes(pcm.tobytes())
 
 
+EVENT_SCENES = {
+    "world2-dog": [("bark", 0.8, 0.6), ("bark", 0.6, 0.6), ("shake", 0.8, 0.6), ("treat", 0.7, 0.05)],
+    "world2-mountain": [("clink", 0.8, 0.05), ("strike", 0.9, 0.05), ("strike", 0.7, 0.05), ("scrape", 0.7, 0.05),
+                        ("fanfare", 0.9, 0.1), ("flag", 0.8, 0.1)],
+    "world2-water-sky": [("bubbles", 0.8, 0.05), ("bubbles", 0.5, 0.05), ("flap", 0.8, 0.3), ("chirp", 0.7, 0.3),
+                         ("chirp", 0.5, 0.3)],
+}
+
+
+def write_events():
+    """Сцены звуков 2.0: события подряд с паузой 0.35 с, пик - 0.8; печатает исходный пик и длительность."""
+    from sound import sfx
+    from sound.sfx import SR as SFX_SR
+    assert SFX_SR == SR
+    os.makedirs(OUT, exist_ok=True)
+    gap = np.zeros(int(0.35 * SR), np.float32)
+    for name, events in EVENT_SCENES.items():
+        parts = []
+        for ev, force, size in events:
+            x = sfx.make(ev, force, size)
+            if x is None:
+                raise SystemExit(f"нет звука {ev}")
+            parts += [np.asarray(x, np.float32), gap]
+        samples = np.concatenate(parts)
+        peak = float(np.abs(samples).max())
+        samples = samples * (0.8 / max(peak, 1e-6))         # в игре тише музыки; для слушания - громче
+        path = os.path.join(OUT, name + ".wav")
+        write_wav(path, samples)
+        print(f"{path}: пик {peak:.2f}, {len(samples) / SR:.1f} с")
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--events", action="store_true", help="только звуки событий 2.0 (без обучения)")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--middle", type=int, default=300)
     ap.add_argument("--max", type=int, default=3000)
     ap.add_argument("--dry", action="store_true", help="только учить и печатать, без файлов")
     args = ap.parse_args()
+    if args.events:
+        write_events()
+        return
     tune = songbook.by_name(TUNE)
     ph = songbook.phrases(tune)[0]
     step = 60.0 / ph.tempo / 2.0

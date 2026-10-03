@@ -63,6 +63,7 @@ def selftest(out_path):
             raise RuntimeError("сеть речи не сказала ни буквы")
         lines.append(f"фраза: «{text}»")
         guitar_check(life, lines)
+        world2_check(window, lines)
         image = window.grab().toImage()
         if image.isNull() or image.width() < 400:
             raise RuntimeError("окно не нарисовалось")
@@ -122,5 +123,47 @@ def main(argv=None):
     return run(sys.argv)
 
 
+def world2_check(window, lines):
+    """2.0: физика pymunk, мир 1280 м с горой, собака, птицы, игрушка, звуки событий."""
+    import numpy as np
+
+    from animals.birds.sky import Sky
+    from game.life import Life
+    from physics.world import PhysWorld
+    from sound import sfx
+    from toys import blocks
+    from world.generate import generate
+
+    m = window.models
+    p = PhysWorld(blocks.Flat(), 0.0)
+    p.add_ball("мяч", 0.0, 2.0)
+    for _ in range(240):
+        p.step(1 / 60)
+    y = float(p.body("мяч").position.y)
+    lines.append(f"физика pymunk: мяч с 2 м лёг на землю, высота {y:.2f} м")
+    if not 0.05 < y < 0.3:
+        raise RuntimeError("мяч провалился или улетел")
+    w = generate(m.world_genome, 9106, 1280.0)
+    if not w.mountains:
+        raise RuntimeError("в мире 1280 м нет горы")
+    peak = w.mountains[0]
+    lines.append(f"мир 1280 м: гор {len(w.mountains)}, первая {peak.height:.0f} м")
+    life = Life(m, 5, 7, 160.0, m.brain if hasattr(m, "brain") else window.brain, bird_mode="often")
+    dog = life.spawn_dog(near=True)
+    flock = life.sky.spawn(life.human.px, 0.5)
+    for _ in range(600):
+        life.tick()
+    if not np.isfinite([dog.x, dog.y]).all() or not flock.birds:
+        raise RuntimeError("собака или птицы сломались")
+    lines.append(f"собака ({dog.look.length:.2f} м) и стайка из {len(flock.birds)} птиц - 10 с жизни")
+    success = blocks.practice(blocks.BlockHeads(seed=1), np.random.default_rng(1), seed=7)
+    lines.append(f"кубики: башня, успех {success:.2f}")
+    for ev in ("bark", "fanfare", "chirp", "bubbles", "clack"):
+        if sfx.make(ev, 0.6, 0.2) is None:
+            raise RuntimeError(f"нет звука {ev}")
+    lines.append("звуки событий: лай, фанфары, щебет, пузыри, кубики")
+
+
 if __name__ == "__main__":
     sys.exit(main())
+

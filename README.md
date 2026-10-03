@@ -2,7 +2,7 @@
 
 # AiBoy
 
-**A living aquarium run by neural networks. One network invents a 2D world, another invents a little person, and then that person lives in the world: walks, jumps, waves his arms, goes up to trees and mushrooms, says things in a chat and, when the world gets boring, sits down and teaches himself the guitar. You just watch and listen.**
+**A living aquarium run by neural networks. One network invents a 2D world, another invents a little person, and then that person lives in the world: walks, jumps, waves his arms, goes up to trees and mushrooms, says things in a chat, teaches himself the guitar, takes toys out of a chest, swims, tames a dog, climbs mountains and plants a flag on the summit. He learns all of it on his own, from scratch. You just watch and listen.**
 
 [Download for Windows](https://github.com/ALEXalesha/AiBoy/releases/latest) &nbsp;·&nbsp; [Русская версия этого файла](README.ru.md)
 
@@ -16,7 +16,7 @@
 
 > **The interface and the little person's speech are in Russian**, and so is the long write-up - [README.ru.md](README.ru.md), which this file summarises. "Наблюдение / Галерея / Статистика / Настройки" are the Watch, Gallery, Statistics and Settings tabs; "Что видит" is the "what he sees" overlay.
 
-The rule of the project: everything AiBoy does comes out of its own neural networks - terrain, sky and ground colours, mountains, clouds, trees, stones and crystals, the person himself, his movements and his phrases. The code only draws, moves the physics and trains. A template speech "teacher" exists only for training at build time; a test checks the sources to make sure the game never imports it. No PyTorch: layers, backpropagation, recurrent nets and Adam are numpy (`nn/`), and every gradient is checked against a numerical one. He has no voice: the owner decided the game is better without it. Since 1.1.0 only toys make sound, namely the guitar he learns to play on his own.
+The rule of the project: everything AiBoy does comes out of its own neural networks - terrain, sky and ground colours, mountains, clouds, trees, stones and crystals, the person himself, his movements and his phrases. The code only draws, moves the physics and trains. A template speech "teacher" exists only for training at build time; a test checks the sources to make sure the game never imports it. No PyTorch: layers, backpropagation, recurrent nets and Adam are numpy (`nn/`), and every gradient is checked against a numerical one. He has no voice: the owner decided the game is better without it. Since 1.1.0 only toys make sound: the guitar he learns to play on his own and, since 2.0, synthesised world events (hits, splashes, barking, a fanfare, birdsong).
 
 ## Four networks
 
@@ -85,6 +85,72 @@ Listen to the samples below. Each file plays the attempt first and then, after a
 
 <img src="docs/preview_attempts.png" width="880" alt="Attempts: the list and a chart of similarity to Twinkle Twinkle growing from 0.1 to 0.5 over 225 attempts">
 
+## 2.0: a bigger world
+
+The owner wanted the little person to have more to do than the guitar, to choose for himself, and to learn everything himself. Every new skill starts as a clumsy beginner, and a learning law in the tests measures that it gets better. All numbers below are measurements; the full write-up is in the plan, `docs/superpowers/plans/2026-09-27-aiboy-2.md` (in Russian).
+
+**Fixed from 1.1.0.**
+
+- **Stopping the old world.** Changing the world used to leave a guitar attempt playing for up to 9 s. Now it fades out in 25 ms, and the old life takes no further step.
+- **Turning.** He decides where to go with a navigator network fed by a memory of places. Over 12 minutes in each of the same 10 worlds, he dithered back and forth zero times.
+- **Boredom.** The guitar gets boring now: there is one boredom for every activity. Half an hour used to be 4 guitar sessions of 27 minutes; now it is 16-22 sessions with a median of 2-3 minutes.
+- **Requests.** «Положи» (put it down) is a request he may turn down.
+
+**A chest and eight toys** run on pymunk physics. Each has its own network head, journal and learning law. Median success, first attempts against later ones:
+
+| Toy | First | Later |
+|---|---|---|
+| ball, kick at a target | 0.06-0.07 | 0.63-0.72 |
+| blocks, height of a standing tower | 0.33-0.67 | 0.83 |
+| bubbles, size without bursting | 0 | 1.0 |
+| paper plane, distance / 40 m | 0.29 | 0.58 |
+| boomerang, came back | 0.03 | 0.35-0.40 |
+| fishing rod, caught a fish | 0.05-0.14 | 0.25-0.34 |
+| bicycle, got there without falling | 0.01-0.05 | 0.87-1.0 |
+| marker, beauty by his own taste | 0.76-0.83 | 0.96 |
+
+<img src="docs/preview_toys.png" width="880" alt="Six frames: blocks, bubbles, paper plane, boomerang, bicycle, marker">
+
+**Needs, water, swimming.** Hunger, thirst and tiredness are urgencies inside his choice of activity, not hard rules. World food tastes good or bad according to his own taste network. About half of the worlds have ponds. He learns to swim from scratch, flailing upright at first; in a 4 m pond he becomes a swimmer after about 11 minutes of play. He never drowns: when he is tired, or has been under water for 2.5 s, he is carried ashore. Fish bite at dawn and dusk.
+
+**Worlds of 640 and 1280 m** get a large-scale relief from an evolved network. The shape of the hills repeats at 0.28, against 0.93 without that network. The old world sizes still give byte-identical worlds. Speed goes up to x16, and it is honest: when a frame can't keep up, the button says so.
+
+**A dog** has its own pymunk body. The first version, with jointed legs, somersaulted on almost any gait, so now a torso rides on spring legs during the stance phase and the legs are drawn by inverse kinematics. It learns to walk (0.23-1.0 -> 1.21-1.22 on flat ground over 100 runs), has its own boredom and needs, and is tamed by patience and treats. A tame dog brings the ball and learns that from praise: the chance it brings the ball rose from 0.16 to 1.0 over 60 throws, and only to 0.13-0.26 without praise.
+
+<img src="docs/preview_dog.png" width="700" alt="A tame dog running after the little person">
+
+**Mountains** of 60-100 m have an easy route (slope 0.22) and a steep face. Every trap the terrain could form was found by measurement and fixed. When he notices a mountain, he chooses for himself:
+
+- walk past;
+- take the easy route;
+- climb the face, with bare hands, a rope and hook, or an ice axe from the chest.
+
+Climbing is learned from scratch, by turning the hand to the hold's facet and picking one of the next three holds. A fall slides him down to a ledge without harm. On a 24 m face he covered 0.03-0.06 of the way at first and 0.40-0.64 after 1,600 attempts. On his first summit he plants a flag. It stays in the world after a restart, flutters in the wind and is visible from afar.
+
+<img src="docs/preview_mountain.png" width="880" alt="Climbing the face with an ice axe, the flag and joy on the summit, the conquered mountain with its flag from afar">
+
+**A diving mask** lets him stay under water as long as his air lasts and watch the fish; without it the 2.5 s limit holds. His diving head learns: he saw a fish in 0.35-0.39 of dives at first and 0.43-0.69 after 800 dives.
+
+<img src="docs/preview_dive.png" width="700" alt="A dive with the mask">
+
+**Birds** fly with a two-control flight network (flap, tail). Holding 3.5 m, a beginner misses by 0.7-4 m and, after 300 flights, by 0.12-0.48 m. Flocks land, take off when someone comes near and learn to take off in time. They never land next to anyone, so nobody can catch a bird, and a test checks that.
+
+<img src="docs/preview_birds.png" width="700" alt="A flock of birds above the little person at night">
+
+**Screens 2.0:**
+
+- «Каталог» (catalogue) shows the toys and activities, with «Предложить» (offer). Whether he agrees is up to him.
+- «Попытки» (attempts) covers every activity and has a replay.
+- The gallery has worlds, drawings and catch.
+- Statistics show the time spent on each activity.
+- Settings add «Собака» (dog), «Птицы» (birds) and the two large world sizes.
+
+**Speech** knows 10 new states. 0.987 of his phrases use only the teacher's words, and 203 are distinct.
+
+**Event sounds** are synthesised: [`world2-dog.wav`](docs/audio/world2-dog.wav), [`world2-mountain.wav`](docs/audio/world2-mountain.wav), [`world2-water-sky.wav`](docs/audio/world2-water-sky.wav).
+
+<img src="docs/preview_catalog.png" width="880" alt="The catalogue: needs and backpack, toy cards with icons">
+
 ## Screens
 
 The game starts on a menu with a short explanation, and the current world stays frozen behind it: life pauses while the menu is open. Then Watch (world, chat on top, panel with curiosity chart, pause, speed x1/x2/x4/x8), Gallery, «Попытки» (attempts), «Научить мелодии» (teach a tune), Statistics and Settings (including volume and the guitar mode). Esc returns to the menu.
@@ -95,11 +161,19 @@ The game starts on a menu with a short explanation, and the current world stays 
 
 Windows builds - an installer and a portable zip with Python, numpy and Qt inside - are on the [releases page](https://github.com/ALEXalesha/AiBoy/releases/latest).
 
-From source (Python 3.11+): `pip install -r requirements.txt`, then `python main.py`. Headless self-check: `python main.py --selftest result.txt`. Besides living 300 steps and speaking, it checks that a string sounds at its pitch and that one guitar attempt is played, scored and saved. Retrain: `python -m train.world`, `train.body`, `train.speech`, `train.brain`. Build: `python build.py` (needs PyInstaller, Pillow and NSIS). Screenshots: `python tools\make_previews.py`; sound samples: `python tools\make_audio.py`.
+From source (Python 3.11+, numpy, PySide6, pymunk 7.3): `pip install -r requirements.txt`, then `python main.py`. Headless self-check: `python main.py --selftest result.txt`. Besides living 300 steps and speaking, it checks that a string sounds at its pitch, that one guitar attempt is played, scored and saved, and, since 2.0, pymunk physics, a 1280 m world with a mountain, a dog and a flock living for 10 s, a block tower and the event sounds. Retrain: `python -m train.world`, `train.body`, `train.speech`, `train.brain`, and for 2.0 `train.navigator`, `train.macro`, `train.water`, `train.mountains`. Build: `python build.py` (needs PyInstaller, Pillow and NSIS). Screenshots: `python tools\make_previews.py`; sound samples: `python tools\make_audio.py` (2.0 event sounds: `--events`).
 
 ## Tests
 
-`python -m pytest` - 334 tests, about four minutes (208 in 1.0.0). They cover gradients, world seeds, the seamless ring and the no-trap law, body limits, physics (the stance leg moves the body, turning on the spot goes nowhere, smooth joints), the brain, speech, the trained models' behaviour (calm, still walking, climbs out of hollows), "no voice" (only the guitar uses QtMultimedia), the guitar, and the whole window driven without a screen. A mutation check broke the code on purpose 20 times (8 in the first build, 12 for the owner's fixes); four of the new breaks first survived, the tests were strengthened, and now every one turns them red. The guitar added 21 more deliberate breaks (a detuned string, no limiter, free extra notes, no silence penalty, a taste blind to similarity, a journal losing its first attempts, mood and hands rules, x8 while playing, the walking brain stepping while he plays, trusting the taste blindly, a self-check that does not save, a guitar that is not drawn): three survived at first, the tests were extended, and all 21 are caught now. The guitar tests include a learning law: over 200 attempts the median similarity of the last 20 beats the first 20 by at least 0.2.
+`python -m pytest` - 560 tests (334 in 1.1.0, 208 in 1.0.0); the learning laws and the 30-minute session laws make a full run take about an hour. They cover gradients, world seeds, the seamless ring and the no-trap law, body limits, physics (the stance leg moves the body, turning on the spot goes nowhere, smooth joints), the brain, speech, the trained models' behaviour (calm, still walking, climbs out of hollows), "no voice" (only the guitar uses QtMultimedia), the guitar, and the whole window driven without a screen. A mutation check broke the code on purpose 20 times (8 in the first build, 12 for the owner's fixes); four of the new breaks first survived, the tests were strengthened, and now every one turns them red. The guitar added 21 more deliberate breaks (a detuned string, no limiter, free extra notes, no silence penalty, a taste blind to similarity, a journal losing its first attempts, mood and hands rules, x8 while playing, the walking brain stepping while he plays, trusting the taste blindly, a self-check that does not save, a guitar that is not drawn): three survived at first, the tests were extended, and all 21 are caught now. The guitar tests include a learning law: over 200 attempts the median similarity of the last 20 beats the first 20 by at least 0.2. Version 2.0 added deliberate breaks for each task:
+
+- stopping the world: 10 of 11 caught, and the survivor is equivalent;
+- pymunk ground: 4 of 4;
+- toys: 14 of 14;
+- dog: 18 of 18;
+- mountains and mask: 19 of 20, and the survivor is equivalent;
+- birds: 10 of 10;
+- gallery cards: 2 of 2.
 
 ## Licence
 

@@ -1083,31 +1083,77 @@ class Life:
         """«Предложить» из «Каталога»: игрушку кладут рядом с ним. Возьмёт ли - тот же выбор
         занятий с прибавкой OFFER_BONUS; не взял - она лежит рядом (и в памяти мест).
         Возвращает (взял, события) или None, если предложить нечего."""
-        if self.stopped or self.playing or name not in self.inv.where or self.inv.where[name] == "carried":
-            return None
-        held = self.inv.carried
-        if held == "guitar":
-            self.put_guitar()                    # руки заняты: своё кладёт рядом
-        elif held is not None:
-            self.inv.put(held, self.human.px)
+        toy = toy_registry.TOYS.get(name)
+        if (self.stopped or self.playing or toy is None or toy.tool or name not in self.inv.where
+                or self.inv.where[name] in ("carried", "flying", "dog")
+                or self.swim.mode is not None or self.climb.mode is not None):
+            return None                          # снаряжение не предлагают; в воде и на стене - не до того
         x = self.human.px + OFFER_NEAR * self.human.facing
         self.inv.where[name] = float(x)
         self.walk.places.marks["гитара" if name == "guitar" else name] = x
-        c = self.choice
-        probs = c.probabilities(["explore", name], {name: OFFER_BONUS})
-        took = self.rng.random() < probs[name]
+        took = name in self.available() and self.rng.random() < self.offer_chance(name)
         events = []
         if took:
-            self.inv.take(name, self.human.px)
-            if name == "guitar":
-                self.pick_guitar()
-                events.append(("pickup",))
-                self.sit_down()
-                events.append(("sit",))
+            self.accept_offer(name, events)
         self.music_flags = {"offered": 1.0, "agreed": 1.0 if took else 0.0}
         events.append(("phrase", self.say()))
         self.music_flags = {"playing": 1.0} if self.playing else {}
         return took, events
+
+    def engaged(self):
+        """Чем он сейчас занят по-настоящему: игрушка, еда-питьё-отдых, идёт за чем-то. Просто гулять -
+        не занятие: гистерезис STICK держит прогулку от дёрганья, а не от предложенной игрушки."""
+        c = self.choice.current
+        busy = (self.toy is not None or self.daily.task is not None or self.seek_toy is not None
+                or self.seeking is not None or self.climb.go is not None)
+        return c if busy and c != "explore" else None
+
+    def offer_chance(self, name):
+        """Возьмёт ли предложенную: тот же выбор «остаться или сменить», что в Choice.choose, - тяга
+        игрушки с прибавкой OFFER_BONUS против того, чем занят (с прибавкой STICK), или против прогулки.
+        Было: против прогулки с STICK - новая игрушка (0.42 + 0.15) проигрывала 0.7 и не бралась никогда."""
+        from acts.choice import STICK, T
+        cur = self.engaged()
+        urgency = dict(self.needs.urgency())
+        urgency[name] = urgency.get(name, 0.0) + OFFER_BONUS
+        other = cur or "explore"
+        p = self.choice.pulls([other, name], urgency)
+        stay = p[other] + (STICK if cur is not None else 0.0)
+        return 1.0 / (1.0 + math.exp(-(p[name] - stay) / T))
+
+    def accept_offer(self, name, events):
+        """Согласился: бросает то, чем был занят, берёт предложенную и сразу играет - как с гитарой."""
+        if self.toy is not None:
+            self.toy.stop()
+            self.toy = None
+        if self.inv.where.get("ball") == "flying":
+            # мяч был в полёте: брошенная игра его уже не проводит - лежит, где он сейчас, и в памяти мест
+            b = self.phys.body("мяч") if self.phys is not None else None
+            x = float(b.position.x) if b is not None else self.human.px
+            if b is not None:
+                self.phys.remove("мяч")
+            self.inv.where["ball"] = x
+            self.walk.places.marks["ball"] = x
+        self.daily.stop()
+        self.seek_toy = self.seek_for = None
+        self.seeking = None
+        self.climb.go = None
+        self.walk.goal = None
+        held = self.inv.carried
+        if held == "guitar":
+            self.put_guitar()                    # руки заняты: своё кладёт рядом
+        elif held is not None:
+            self.put_held()
+            events.append(("put_toy", held))
+        self.inv.take(name, self.human.px)
+        if name == "guitar":
+            self.pick_guitar()
+            events.append(("pickup",))
+            self.sit_down()
+            events.append(("sit",))
+        else:
+            events.append(("pickup_toy", name))
+            self.start_toy(name, events)
 
     def wants_to_leave_it(self, name="guitar"):
         """Наигравшись: положить игрушку здесь или взять с собой. Нравится она - берёт с собой

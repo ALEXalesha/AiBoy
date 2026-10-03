@@ -375,6 +375,7 @@ class CatalogPage(Page):
             return None
         res = life.offer(name)
         if res is None:
+            self.status.setText("Сейчас не предложить: он в воде, на горе или уже держит её.")
             return None
         took, events = res
         self.window_.observe.handle(life, events)

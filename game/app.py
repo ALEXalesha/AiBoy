@@ -264,7 +264,8 @@ class ObservePage(Page):
                          choice=choice, needs=needs, backpack=pack, food_prefs=prefs, swimmer=swimmer,
                          toy_heads=life_store.load_toys(body_seed),
                          dog_mode=w.settings.dog, dog_saved=life_store.load_dog(world_seed),
-                         climber=life_store.load_climb(body_seed)[0], summits=life_store.load_summits(world_seed))
+                         climber=life_store.load_climb(body_seed)[0], summits=life_store.load_summits(world_seed),
+                         bird_mode=w.settings.birds, birds_saved=life_store.load_birds(world_seed))
         self.life.climb.fear = life_store.load_climb(body_seed)[1]
         self.show_guitar(False)
         self.refresh_put()

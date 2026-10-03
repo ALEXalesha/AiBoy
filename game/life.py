@@ -84,7 +84,7 @@ class Life:
     def __init__(self, models, world_seed, body_seed, width, brain, frequency="normal", seed=None,
                  guitarist=None, has_guitar=False, guitar_freq="sometimes", choice=None, navigator=None,
                  needs=None, backpack=None, food_prefs=None, swimmer=None, toy_heads=None, chest=None,
-                 dog_mode="never", dog_saved=None, climber=None, summits=None):
+                 dog_mode="never", dog_saved=None, climber=None, summits=None, bird_mode="off", birds_saved=None):
         self.models = models
         self.world_seed, self.body_seed = int(world_seed), int(body_seed)
         self.world = generate(models.world_genome, world_seed, width)
@@ -181,6 +181,12 @@ class Life:
         self.climb_flags = {}
         self.choice.add("climb", 5.0)
         self.choice.add("dive", 5.0)            # нырять в маске (acts/dive.py)
+        # птицы (animals/birds): стайки по настройке и настроению; сети полёта и взлёта - мира
+        from animals.birds.sky import Sky
+        flyer, takeoff = birds_saved if birds_saved else (None, None)
+        self.sky = Sky(self.world, world_seed, bird_mode, np.random.default_rng([int(world_seed), int(body_seed), 17]),
+                       flyer=flyer, takeoff=takeoff)
+        self.bird_chase = None
         self._air_top = None
         self._pending = []                     # события собаки - в ответ tick()
         # собака (animals/dog): есть ли в мире - по настройке и настроению; ручная из сохранения -
@@ -366,6 +372,7 @@ class Life:
         return events
 
     def _clock_tick(self):
+        self._birds_tick()
         self._fall_guard()
         self._summit_check()
         self.choice.tick(DT)
@@ -383,6 +390,39 @@ class Life:
             self._log_clock -= LOG_EVERY
             self.curiosity_log.append(float(self.brain.last_err))
             del self.curiosity_log[:-240]
+
+    # --- птицы ---
+    def _birds_tick(self):
+        if self.sky.mode == "off" and not self.sky.flocks:
+            return
+        h = self.human
+        dangers = [(h.px, abs(h.vx))]
+        if self.dog is not None:
+            dangers.append((self.dog.x, abs(self.dog.body.vx()) if self.dog.free_x is None else 1.0))
+            if self.dog_ctx is not None:
+                self.dog_ctx.birds = self.sky.perched_x()
+        wind = self.wind.at(h.px, h.py + 6.0, self.time)
+        for e in self.sky.tick(DT, h.px, self.choice.mood, dangers, wind, learn=self.learn):
+            self._pending.append(e)
+        # смотрит на птиц - это интересно (интерес мира); иногда идёт к севшим
+        near = [b for f in self.sky.flocks for b in f.birds if abs(self.inv.dist(b.x, h.px)) < 12.0]
+        if near and self.choice.current == "explore":
+            e = self.choice.acts["explore"]
+            e.liking = min(1.0, e.liking + 0.0005 * len(near) * DT * 60 / 60)
+            self.bird_flags = {"birds": 1.0}
+        else:
+            self.bird_flags = {}
+        perched = self.sky.perched_x()
+        if (self.bird_chase is None and perched and self.choice.current == "explore" and self.walk.goal is None
+                and self.toy is None and self.rng.random() < DT / 40.0):
+            x = min(perched, key=lambda v: self.inv.dist(v, h.px))
+            if self.inv.dist(x, h.px) < 20.0:
+                self.bird_chase = self.time
+                self.walk.goal = x                       # побежать к птицам (они улетят - закон мира)
+        if self.bird_chase is not None and (not perched or self.time - self.bird_chase > 15.0):
+            self.bird_chase = None
+            if self.choice.current == "explore" and self.toy is None and self.climb.go is None:
+                self.walk.goal = None
 
     # --- горы ---
     def _fall_guard(self):
@@ -841,6 +881,7 @@ class Life:
         f.update(self.climb_flags)
         if self.swim.mask:
             f["diving"] = 1.0
+        f.update(getattr(self, "bird_flags", {}))
         if self.dog is not None:
             f["dog_near"] = 1.0 if abs(self.dog.dist(self.human.px)) < 8.0 else 0.0
             f["dog_tame"] = 1.0 if self.dog.tamed else 0.0

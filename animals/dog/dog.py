@@ -31,9 +31,9 @@ from animals.dog import motor as motor_mod
 from animals.dog.body import DogBody
 from animals.dog.look import look as dog_look
 
-ACTS = ("explore", "follow", "fetch", "swim", "rest", "eat", "drink")
+ACTS = ("explore", "follow", "fetch", "swim", "chase", "rest", "eat", "drink")
 NEEDS = ("rest", "eat", "drink")
-HALF = {"explore": 6.0, "follow": 3.0, "fetch": 3.0, "swim": 2.5}   # мин - половина тяги уходит
+HALF = {"explore": 6.0, "follow": 3.0, "fetch": 3.0, "swim": 2.5, "chase": 1.5}   # мин - половина тяги уходит
 RECOVER = 3.0               # мин - скука спадает в e раз без занятия
 DECIDE = 3.0                # с между точками выбора
 MIN_KEEP = 12.0             # с - не меньше в одном занятии, если нужда не срочная
@@ -64,6 +64,7 @@ class DogCtx:
         self.person = None          # (x, vx) или None
         self.ball = None            # (x, y, скорость) мяча, если он лежит или летит в физике
         self.thrown = False         # он только что бросил мяч (сам ставит, собака сбрасывает)
+        self.birds = []             # x сидящих птиц
         self.events = []
 
     def level(self, x):
@@ -95,6 +96,7 @@ class DogChoice:
         self.acts["fetch"].liking = 0.3 + 0.5 * look_.playful
         self.acts["follow"].liking = 0.4
         self.acts["swim"].liking = 0.25 + 0.3 * look_.playful
+        self.acts["chase"].liking = 0.3 + 0.4 * look_.playful        # гоняться за птицами
         self.current = "explore"
         self.since = 0.0
 
@@ -290,6 +292,8 @@ class Dog:
             acts.append("fetch")
         if ctx.ponds():
             acts.append("swim")
+        if any(abs(self.dist(b)) < 15.0 for b in ctx.birds):
+            acts.append("chase")                 # птицы сели рядом - погоняться
         return acts
 
     def _decide(self, ctx):
@@ -374,6 +378,12 @@ class Dog:
                         away = -math.copysign(1.0, self.dist(person)) if person is not None else self.body.facing
                         self.fetch_drop_x = self.x + away * float(self.rng.uniform(6.0, 12.0))
                     ctx.events.append(("dog_grab", FETCH_CHOICES[a]))
+        elif act == "chase" and ctx.birds:
+            b = min(ctx.birds, key=lambda v: abs(self.dist(v)))
+            self.target, self.want = self.x + self.dist(b), motor_mod.RUN   # птицу не поймать - закон мира
+            if self.task_t > 12.0:
+                self.choice.after("chase", 0.6)
+                self.choice.since = MIN_KEEP
         elif act == "swim":
             ponds = ctx.ponds()
             if ponds:

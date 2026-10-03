@@ -76,6 +76,7 @@ def save(life):
         ok = j.save() and ok
     ok = skill_store.save(life.body_seed, "climb", life.climb.climber) and ok
     ok = save_summits(life) and ok
+    ok = save_birds(life) and ok
     return save_dog(life) and ok
 
 
@@ -131,6 +132,36 @@ def save_dog(life):
             motor.save(mp)
         if fetch is not None:
             fetch.save(fp)
+    except OSError:
+        return False
+    return True
+
+
+def birds_paths(world_seed):
+    base = ("worlds", str(int(world_seed)))
+    return paths.user_file(*base, "birds_flight.npz"), paths.user_file(*base, "birds_takeoff.npz")
+
+
+def load_birds(world_seed):
+    """(сеть полёта, голова взлёта) птиц мира или None."""
+    from animals.birds.flight import Flyer
+    from animals.birds.flock import TakeOff
+    fp, tp = birds_paths(world_seed)
+    if not os.path.exists(fp):
+        return None
+    try:
+        return (Flyer(seed=int(world_seed) % (2 ** 31)).load(fp), TakeOff(seed=int(world_seed) % (2 ** 31) + 1).load(tp))
+    except Exception:  # noqa: BLE001 - битые - с нуля
+        return None
+
+
+def save_birds(life):
+    if life.sky.flyer.flights == 0 and life.sky.takeoff.flights == 0 and not life.sky.flyer.skill.attempts:
+        return True
+    fp, tp = birds_paths(life.world_seed)
+    try:
+        life.sky.flyer.save(fp)
+        life.sky.takeoff.save(tp)
     except OSError:
         return False
     return True

@@ -182,7 +182,29 @@ def bubbles(force=1.0, size=0.05, seed=17):
     return (0.25 * force * x).astype(np.float32)
 
 
-SOUNDS = {"bubbles": bubbles, "fanfare": fanfare, "flag": flag, "clink": clink, "strike": strike, "scrape": scrape, "bark": bark, "shake": shake, "treat": crunch, "scratch": scratch, "chain": chain, "kick": thump, "throw": whoosh, "bounce": bounce, "catch": slap, "land": thump, "clack": clack,
+def flap(force=1.0, size=0.3, seed=18):
+    """Взмахи крыльев: несколько глухих хлопков, у крупных реже и ниже."""
+    n = int(0.35 * SR)
+    t = np.arange(n) / SR
+    rate = 14.0 if size < 0.4 else 7.0
+    x = _lowpass(_noise(n, seed), 0.2) * (0.5 + 0.5 * np.sin(2 * np.pi * rate * t)) ** 4 * _env(n, attack=0.01, decay=0.2)
+    return (0.4 * force * x).astype(np.float32)
+
+
+def chirp(force=1.0, size=0.3, seed=19):
+    """Щебет: два коротких свиста вверх, мелкие - выше."""
+    parts = []
+    base = 2600.0 if size < 0.4 else 1500.0
+    for k in range(2):
+        n = int(0.07 * SR)
+        t = np.arange(n) / SR
+        f = base * (1.0 + 0.6 * t / t[-1]) * (1.0 + 0.1 * k)
+        parts.append(np.sin(2 * np.pi * np.cumsum(f) / SR) * _env(n, attack=0.005, decay=0.03))
+        parts.append(np.zeros(int(0.04 * SR)))
+    return (0.2 * force * np.concatenate(parts)).astype(np.float32)
+
+
+SOUNDS = {"flap": flap, "chirp": chirp, "bubbles": bubbles, "fanfare": fanfare, "flag": flag, "clink": clink, "strike": strike, "scrape": scrape, "bark": bark, "shake": shake, "treat": crunch, "scratch": scratch, "chain": chain, "kick": thump, "throw": whoosh, "bounce": bounce, "catch": slap, "land": thump, "clack": clack,
           "fall": thump, "splash": splash, "whoosh": whoosh, "pop": pop}
 
 

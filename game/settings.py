@@ -16,6 +16,8 @@ GUITAR_MODES = ("musician", "hands")
 GUITAR_MODE_NAMES = {"musician": "Музыкант", "hands": "Руками"}
 GUITAR_FREQS = ("rare", "sometimes", "often")
 GUITAR_FREQ_NAMES = {"rare": "Редко", "sometimes": "Иногда", "often": "Часто"}
+BIRD_MODES = ("off", "rare", "often")
+BIRD_NAMES = {"off": "Нет", "rare": "Редко", "often": "Часто"}
 DOG_MODES = ("never", "sometimes", "often")
 DOG_NAMES = {"never": "Никогда", "sometimes": "Иногда", "often": "Часто"}
 GUITAR_FAST = ("slow", "silent")
@@ -36,6 +38,7 @@ class Settings:
     guitar_freq: str = "sometimes"
     guitar_fast: str = "slow"    # что делать со скоростью, пока он играет
     dog: str = "sometimes"       # собака в мире: никогда / иногда (около 40 % миров) / часто
+    birds: str = "rare"          # птицы: нет / редко / часто
 
     @staticmethod
     def valid(name, value):
@@ -51,6 +54,7 @@ class Settings:
             "guitar_freq": lambda v: v in GUITAR_FREQS,
             "guitar_fast": lambda v: v in GUITAR_FAST,
             "dog": lambda v: v in DOG_MODES,
+            "birds": lambda v: v in BIRD_MODES,
         }
         try:
             return checks[name](value)

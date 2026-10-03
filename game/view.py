@@ -831,6 +831,41 @@ def draw_dog(p, f, world, v):
     p.restore()
 
 
+def draw_birds(p, f, world, v):
+    """Птицы: тельце, крылья по фазе взмаха (сидя - сложены), клюв. Вид - из сети птиц мира."""
+    if not v or not v["birds"]:
+        return
+    lk = v["look"]
+    body = qc(lk.color)
+    span = max(18.0, lk.span * f.ppm * 1.4)          # мелкую птицу на фоне неба иначе не разглядеть (кадр)
+    for x, y, phase, facing, perched in v["birds"]:
+        x = unwrap(x, f.cam_x, world.width)
+        if abs(x - f.cam_x) > f.half + 2:
+            continue
+        c = QPointF(f.X(x), f.Y(y + (0.06 if perched else 0.0)))
+        p.save()
+        p.translate(c)
+        if facing < 0:
+            p.scale(-1, 1)
+        p.setPen(QPen(qc(darker(lk.color, 0.55)), max(1.0, span * 0.03)))
+        p.setBrush(body)
+        p.drawEllipse(QPointF(0, 0), span * 0.22, span * 0.1)
+        p.drawEllipse(QPointF(span * 0.2, -span * 0.07), span * 0.08, span * 0.08)
+        p.setBrush(QColor(230, 170, 60))
+        p.drawPolygon(QPolygonF([QPointF(span * 0.27, -span * 0.08), QPointF(span * 0.36, -span * 0.06),
+                                 QPointF(span * 0.27, -span * 0.04)]))
+        pen = QPen(qc(darker(lk.color, 0.25)), max(1.5, span * 0.06))
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        if perched:
+            p.drawLine(QPointF(-span * 0.15, -span * 0.02), QPointF(span * 0.1, -span * 0.04))
+        else:
+            a = math.sin(phase * 2 * math.pi) * (0.9 if not lk.glider else 0.35)
+            tip = QPointF(-span * 0.1, -span * 0.5 * math.cos(a) * (1 if a > -0.2 else -1) - span * 0.1 * a)
+            p.drawLine(QPointF(0, -span * 0.05), tip)
+        p.restore()
+
+
 def draw_toys(p, f, world, items):
     """Игрушки в мире: мяч (кружок с бликом), метка цели (флажок)."""
     for kind, x, y, r, color in items:
@@ -965,7 +1000,7 @@ def draw_water(p, f, world, water, t):
 
 def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thoughts=None, guitar=None,
                guitar_x=None, chest_x=None, water=None, fish=None, toys=None, dog=None, peaks=None,
-               flags=None, wind=0.0):
+               flags=None, wind=0.0, birds=None):
     f = Frame(rect, cam_x, cam_y)
     p.save()
     p.setClipRect(rect)
@@ -1009,6 +1044,8 @@ def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thou
             draw_bubble(p, f, head, speech[0], min(1.0, speech[1] / 0.4), colors)
     if toys:
         draw_toys(p, f, world, toys)
+    if birds:
+        draw_birds(p, f, world, birds)
     if fish is not None and fish.fish:
         draw_fish(p, f, world, fish)
     if water is not None and water.ponds:
@@ -1214,7 +1251,8 @@ class WorldView(QWidget):
                        toys=life.toy_visuals() if hasattr(life, "toy_visuals") else None,
                        dog=life.dog.visuals() if getattr(life, "dog", None) is not None else None,
                        flags=life.climb.flags if hasattr(life, "climb") else None,
-                       wind=life.wind.at(life.human.px, life.human.py, life.time) if hasattr(life, "wind") else 0.0)
+                       wind=life.wind.at(life.human.px, life.human.py, life.time) if hasattr(life, "wind") else 0.0,
+                       birds=life.sky.visuals() if hasattr(life, "sky") else None)
         self.vision_rect = None
         if self.show_vision and not getattr(life, "playing", False):
             # раз в кадр, а не на каждый шаг жизни: на x8 это та же цена

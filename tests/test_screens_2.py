@@ -4,6 +4,7 @@ import time
 
 import pytest
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication
 
 from game import app as app_module
 from toys import registry
@@ -69,6 +70,8 @@ def test_attempts_show_every_activity_and_replay_a_trace(win):
 def test_gallery_shows_drawings_and_catch_in_cards_with_room(win):
     life = win.observe.life
     add_entries(life)
+    for _ in range(8):                   # несколько рядов: сетка выше окна (кадр: подпись на белом листе)
+        life.toy_journals["marker"].add(dict(life.toy_journals["marker"].entries[0]))
     win.resize(1280, 720)
     win.show_page("gallery")
     g = win.gallery_page
@@ -76,10 +79,27 @@ def test_gallery_shows_drawings_and_catch_in_cards_with_room(win):
         g.set_mode(mode)
         assert word in g.count_label.text()
         cards = [g.grid.itemAt(i).widget() for i in range(g.grid.count())]
+        QApplication.processEvents()     # один проход событий - первый кадр, который увидит человек
+        need = cards[0].minimumSizeHint().height()
+        assert cards and all(c.height() >= need for c in cards)         # подпись не наезжает на картинку
         rects = settle(lambda: [c.geometry().getRect() for c in cards])
-        assert cards and all(r[3] >= g.THUMB[1] for r in rects)         # не сжаты в полосы
+        assert all(r[3] >= g.THUMB[1] for r in rects)                   # не сжаты в полосы
     g.set_mode("worlds")
     assert g.cards
+
+
+def test_world_cards_have_room_on_the_first_frame(win):
+    for seed in range(4, 12):            # миров - на несколько рядов, сетка выше окна
+        win.observe.new_world(seed=seed)
+    win.resize(1240, 780)
+    win.show_page("observe")             # как человек: с другой вкладки в «Галерею»
+    QTest.qWait(0)
+    win.show_page("gallery")
+    cards = list(win.gallery_page.cards.values())
+    assert len(cards) >= 6
+    QApplication.processEvents()         # первый кадр (было: кнопки и подпись поверх кадра мира)
+    need = cards[0].minimumSizeHint().height()
+    assert all(c.height() >= need for c in cards)
 
 
 def test_catalog_has_the_new_toys_tools_and_activities(win):

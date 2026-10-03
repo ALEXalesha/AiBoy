@@ -744,6 +744,7 @@ class GalleryPage(Page):
             else:
                 lay.addWidget(label(f"длина {100 * float(e['fish'].get('length', 0)):.0f} см", "hint"))
             self.grid.addWidget(c, i // cols, i % cols)
+            c.show()                             # сразу: Qt показывает новых детей отложенно, а скрытых сетка не считает
 
     def refresh(self):
         while self.grid.count():
@@ -755,9 +756,15 @@ class GalleryPage(Page):
         self.cards = {}
         if self.mode != "worlds":
             self.refresh_items()
-            self.grid.activate()
-            self.grid_host.adjustSize()          # высота сетки - под новые карточки (кадр: сжимались в полосы)
-            return
+        else:
+            self.refresh_worlds()
+        self.grid.activate()
+        # высота сетки - под новые карточки сразу: область прокрутки подгоняет её только потом, и
+        # первый кадр сжимал карточки - подпись и кнопки ложились на картинку (карточки уже показаны)
+        view = self.scroll.viewport()
+        self.grid_host.resize(view.width(), max(view.height(), self.grid_host.minimumSizeHint().height()))
+
+    def refresh_worlds(self):
         entries = self.window_.gallery.entries
         n = len(entries)
         self.count_label.setText(f"{n} {plural(n, 'мир', 'мира', 'миров')}")
@@ -784,6 +791,7 @@ class GalleryPage(Page):
             row.addWidget(button("Удалить", "danger", lambda _=False, i_=e["id"]: self.delete_entry(i_)))
             lay.addLayout(row)
             self.grid.addWidget(c, i // cols, i % cols)
+            c.show()                             # сразу: Qt показывает новых детей отложенно, а скрытых сетка не считает
             self.cards[e["id"]] = c
 
     def open_entry(self, entry_id):

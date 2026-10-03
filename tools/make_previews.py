@@ -8,6 +8,9 @@
 «что видит», серия кадров наблюдения подряд; гитара - он играет (гриф с пальцами и
 крупно человечек с гитарой), «Попытки» после 300 попыток, «Научить мелодии» с записанной
 мелодией, настройки с громкостью и режимом гитары.
+
+2.0: игрушки в деле (серия), собака, птицы, гора (лезет по стене, флаг на вершине, гора с флагом
+издали), нырок в маске, «Каталог» и рисунки в «Галерее».
 """
 import os
 import sys
@@ -17,7 +20,7 @@ os.environ["AIBOY_HOME"] = tempfile.mkdtemp(prefix="aiboy-previews-")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 for var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
-    os.environ.setdefault(var, "4")
+    os.environ.setdefault(var, "2")
 
 import offscreen  # noqa: E402
 
@@ -163,6 +166,146 @@ def teach_shot(window):
     page.piano.down = set()
 
 
+def view_frame(obs, w=600, h=360):
+    return obs.view.grab().toImage().scaled(w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                            Qt.TransformationMode.SmoothTransformation)
+
+
+def force(life, name):
+    c = life.choice
+    for n in c.acts:
+        if n not in ("eat", "drink", "rest"):
+            c.acts[n].liking = 0.0
+    c.acts[name].liking, c.acts[name].boredom = 1.0, 0.0
+
+
+def toys_strip(window):
+    """Игрушки в деле: кубики, пузыри, самолётик, бумеранг, велосипед, фломастер."""
+    obs = window.observe
+    frames, caps = [], []
+    titles = {"blocks": "кубики", "bubbles": "пузыри", "plane": "самолётик", "boomerang": "бумеранг",
+              "bicycle": "велосипед", "marker": "фломастер"}
+    ready = {"blocks": lambda t: len(t.attempt.placed) >= 4, "bubbles": lambda t: t.attempt.bubble is not None
+             and t.attempt.bubble.age > 0.6, "plane": lambda t: t.attempt.t > 0.8,
+             "boomerang": lambda t: t.attempt.t > 1.2, "bicycle": lambda t: t.attempt.t > 3,
+             "marker": lambda t: t.attempt.t > 3.5}
+    for name in titles:
+        obs.start(MAIN_WORLD, MAIN_BODY)
+        life = obs.life
+        for _ in range(60 * 300):
+            force(life, name)
+            obs.advance(1)
+            t = life.toy
+            if t is not None and getattr(t, "attempt", None) is not None and ready[name](t):
+                break
+        frames.append(view_frame(obs))
+        caps.append(titles[name])
+    strip(frames, 3, "toys", caps)
+
+
+def animals_shots(window):
+    """Собака рядом с ним и стайка птиц."""
+    obs = window.observe
+    obs.start(5, 7)
+    life = obs.life
+    dog = life.spawn_dog(near=True)
+    dog.trust, dog.tamed = 1.0, True     # ручная и хочет быть с ним (своя воля - обычно ещё и гулять)
+    dog.choice.acts["follow"].liking, dog.choice.current = 1.0, "follow"
+    for _ in range(90):                  # полторы секунды: новичок-собака бегает медленнее, чем он ходит
+        dog.choice.acts["follow"].liking = 1.0
+        obs.advance(1)
+    shot(obs.view, "dog")
+    obs.start(6, 7)                      # птицы - в своём мире, без собаки
+    life = obs.life
+    f = life.sky.spawn(life.human.px + 20.0, 0.8)
+    f.facing = -1
+    for b in f.birds:
+        b.facing, b.x = -1, life.human.px + 3 + (b.x - f.x) * 0.5
+    for _ in range(60 * 20):
+        obs.advance(1)
+        seen = [b for b in f.birds if abs(b.x - life.human.px) < 6
+                and 1.0 < b.y - life.world.height_at(b.x) < 3.5]       # в кадре, а не над его краем
+        if len(seen) >= 2:
+            break
+    shot(obs.view, "birds")
+
+
+def mountain_shots(window):
+    """Гора: лезет по стене с ледорубом, флаг и радость на вершине, гора с флагом издали."""
+    obs = window.observe
+    obs.start(9106, 7, 1280.0)
+    life = obs.life
+    p = life.world.mountains[0]
+
+    def put(x):
+        h = life.human
+        h.px, h.py, h.vy = x, life.world.height_at(x) + h.body.leg() + 0.05, 0.0
+    frames, caps = [], []
+    put(p.face_foot())
+    life.climb.start_face(0, "axe")
+    life.climb.y = 9.0
+    life.climb._place()
+    obs.advance(30)
+    frames.append(view_frame(obs, 800, 480))
+    caps.append("лезет по стене с ледорубом")
+    life.climb.mode = None
+    put(p.summit - p.steep * 0.5)
+    life.climb.summit(0, life._pending)
+    obs.advance(40)
+    frames.append(view_frame(obs, 800, 480))
+    caps.append("вершина: флаг и радость")
+    p.snow = 0.9
+    life.climb.mode = None
+    put(p.summit - p.steep * (p.easy_len + 60.0))
+    obs.advance(5)
+    frames.append(view_frame(obs, 800, 480))
+    caps.append("покорённая гора издали")
+    strip(frames, 3, "mountain", caps)
+
+
+def dive_shot(window):
+    from acts import dive
+    from game import models
+    from world.generate import generate
+    from world.water import Water
+    m = models.load()
+    seed = next(s for s in range(7100, 7400) if any(q.depth > 1.2 for q in Water(generate(m.world_genome, s, 160.0)).ponds))
+    obs = window.observe
+    obs.start(seed, 7, 160.0)
+    life = obs.life
+    pond = max(life.water.ponds, key=lambda q: q.depth)
+    h = life.human
+    h.px = (pond.left + pond.right) / 2
+    h.py = life.world.height_at(h.px) + h.body.leg()
+    life.swim.pond = pond
+    life.swim.enter()
+    life.swim.swimmer.history = [2.0] * 10
+    life.choice.current = "dive"
+    life.swim.put_on_mask(dive.MaskHeads(seed=1))
+    for _ in range(60 * 30):
+        obs.advance(1)
+        d = life.swim.dive
+        if d is not None and d[0] == "hold" and d[6] > 0.5:
+            break
+    shot(obs.view, "dive")
+
+
+def catalog_and_drawings(window):
+    obs = window.observe
+    obs.start(MAIN_WORLD, MAIN_BODY)
+    life = obs.life
+    for name, secs in (("blocks", 90), ("marker", 120)):
+        for _ in range(int(secs * 60)):
+            force(life, name)
+            obs.advance(1)
+    window.show_page("catalog")
+    shot(window, "catalog")
+    window.show_page("gallery")
+    window.gallery_page.set_mode("drawings")
+    shot(window, "drawings")
+    window.gallery_page.set_mode("worlds")
+
+
 def main():
     app = QApplication.instance() or QApplication([])
     window = MainWindow(autostart=False)
@@ -201,6 +344,14 @@ def main():
 
     guitar_shots(window)
     teach_shot(window)
+
+    window.change_setting("show_vision", False)
+    toys_strip(window)
+    animals_shots(window)
+    mountain_shots(window)
+    dive_shot(window)
+    catalog_and_drawings(window)
+    window.change_setting("show_vision", True)
 
     window.show_page("gallery")
     shot(window, "gallery")

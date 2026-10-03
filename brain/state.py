@@ -5,7 +5,7 @@
 (сторона и направление - от -1 до 1): холмы и ямы справа и слева, ровно ли вокруг,
 ближайшая сущность (вид, сторона, расстояние, цвет), желания идти и прыгать, любопытство,
 на земле ли, упал ли недавно, скорость, ночь, куда смотрит; и гитара: играет ли, учит ли
-мелодию, получилось ли только что, не выходит ли.
+мелодию, получилось ли только что, не выходит ли; нужды, вода, собака, гора, маска, птицы.
 """
 import colorsys
 
@@ -20,7 +20,10 @@ FIELDS = (("hill_right", "hill_left", "pit_right", "pit_left", "flat")
              "want_dir", "want_jump", "curiosity", "grounded", "fell", "speed", "airborne",
              "night", "facing", "playing", "learning_tune", "got_it", "failing",
              "stood_up", "asked_put", "agreed", "refused", "offered",
-             "hungry", "thirsty", "tired", "tasty", "not_tasty", "swimming", "rescued"))
+             "hungry", "thirsty", "tired", "tasty", "not_tasty", "swimming", "rescued",
+             # 2.0: собака, гора, маска, птицы
+             "dog_near", "dog_tame", "dog_brought", "dog_tamed", "dog_fled", "summit", "summit_first",
+             "climb_fell", "diving", "birds"))
 STATE_DIM = len(FIELDS)
 IDX = {name: i for i, name in enumerate(FIELDS)}
 LOOK = 8.0            # м - холмы и ямы

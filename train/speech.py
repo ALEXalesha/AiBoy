@@ -99,6 +99,13 @@ def augment(states, rng):
     s[k, IDX["tasty"]] = 1.0
     k = rng.random(n) < 0.04
     s[k, IDX["not_tasty"]] = 1.0
+    # 2.0: собака, гора, маска, птицы - редкие состояния, у каждого свои слова
+    for flag, share in (("summit", 0.03), ("summit_first", 0.02), ("climb_fell", 0.03), ("dog_tamed", 0.02),
+                        ("dog_brought", 0.03), ("dog_fled", 0.03), ("diving", 0.04), ("birds", 0.06)):
+        s[rng.random(n) < share, IDX[flag]] = 1.0
+    k = rng.random(n) < 0.08
+    s[k, IDX["dog_near"]] = 1.0
+    s[k, IDX["dog_tame"]] = (rng.random(k.sum()) < 0.5).astype(np.float32)
     k = rng.random(n) < 0.05
     s[k, IDX["offered"]] = 1.0
     s[k, IDX["asked_put"]] = 0.0
@@ -149,7 +156,10 @@ def named_examples(net, rng):
              "плывёт": st(swimming=1), "выбрался на берег": st(rescued=1),
              "голоден": st(hungry=1), "устал": st(tired=1), "вкусно": st(tasty=1), "невкусно": st(not_tasty=1),
              "упал": st(fell=1.0), "холм справа": st(hill_right=1.0), "синее дерево рядом": blue_tree,
-             "скучно": st(curiosity=0.05), "ночь": st(night=1.0, curiosity=0.4), "летит": st(airborne=1, grounded=0)}
+             "скучно": st(curiosity=0.05), "ночь": st(night=1.0, curiosity=0.4), "летит": st(airborne=1, grounded=0),
+             "на вершине впервые": st(summit=1, summit_first=1), "сорвался со стены": st(climb_fell=1),
+             "приручил собаку": st(dog_tamed=1), "собака принесла мяч": st(dog_brought=1),
+             "собака рядом": st(dog_near=1), "ныряет в маске": st(diving=1), "птицы": st(birds=1)}
     return {name: [net.sample(s, rng, TEMPERATURE) for _ in range(4)] for name, s in cases.items()}
 
 

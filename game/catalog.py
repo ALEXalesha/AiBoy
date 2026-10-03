@@ -18,11 +18,118 @@ from game.chart import NeedsView
 from game.ui import Page, button, card, label, plural
 from toys import registry
 
-ACT_TITLES = {"explore": "Гулять", "swim": "Плавать"}
+ACT_TITLES = {"explore": "Гулять", "swim": "Плавать", "dog": "Собака", "climb": "Гора", "dive": "Нырять в маске"}
 ACT_NOTES = {"explore": "Ходит по миру и сам решает, куда: вперёд, назад, остановиться и осмотреться.",
              "swim": "Учится плавать с нуля: сначала барахтается стоймя, потом плывёт. Никогда не тонет - "
-                     "устал или нахлебался - его выносит на берег."}
+                     "устал или нахлебался - его выносит на берег.",
+             "dog": "Если в мире есть собака: приручает (подходит не спеша, протягивает лакомство), с ручной - "
+                    "бросает ей мяч. У собаки своя воля: ей тоже бывает скучно.",
+             "climb": "Заметил гору - может пройти мимо, подняться лёгким путём или полезть на стену (руками, с "
+                      "верёвкой, с ледорубом). Срываясь, съезжает без вреда. На вершине - флаг и радость.",
+             "dive": "С маской из сундука ныряет к рыбам: под водой - пока хватает воздуха, и всё равно не тонет."}
+TOY_NOTES = {"ball": "Пинает и бросает в цель, бросает вверх и ловит. Сила - его тела, точность - учится.",
+             "blocks": "Строит башню: какой кубик взять и как поставить. Устояла 3 с - успех.",
+             "bubbles": "Выдувает пузыри: сильнее - больше, но лопаются. Ветер их уносит.",
+             "plane": "Бросает бумажный самолётик: угол, сила, балансировка - дальше и дольше в воздухе.",
+             "boomerang": "Бросает бумеранг так, чтобы вернулся; поймал - вдвойне хорошо.",
+             "rod": "Рыбачит у пруда: куда забросить и когда подсечь после поклёвки. Улов - в «Галерее».",
+             "bicycle": "Катается по холмам: как крутить и куда наклоняться, чтобы не упасть.",
+             "marker": "Рисует на листе; красота - на его вкус, ваши 👍/👎 в «Попытках» его учат. Рисунки - в «Галерее»."}
+TOOL_NOTES = {"rope": "Снаряжение для стены горы: бросает крюк вверх, зацепился - срыв останавливается на нём.",
+              "axe": "Снаряжение для стены горы: вбитый под грань ледоруб держит как ступенька.",
+              "mask": "Снаряжение для воды: с маской дышит под водой и смотрит рыб."}
 ICON = 96
+
+
+def _items_icon(items):
+    """Значок игрушки - тем же рисованием игрушек, что в мире (game/view.draw_toys)."""
+    def draw(p, frame, colors):
+        from game.view import draw_toys
+
+        class World:
+            width = 1e9
+
+        class F(frame):
+            cam_x, half = 0.0, 10.0
+        draw_toys(p, F, World, items)
+    return draw
+
+
+def _shape_icon(kind):
+    def draw(p, frame, colors):
+        from PySide6.QtGui import QPainterPath, QPen, QPolygonF
+        acc = QColor(colors["accent"])
+        txt = QColor(colors["text"])
+        p.setPen(Qt.PenStyle.NoPen)
+        if kind == "rope":
+            p.setPen(QPen(acc, 5))
+            for r in (0.28, 0.2, 0.12):
+                p.drawEllipse(frame.P((0.0, 0.0)), r * frame.ppm, r * 0.7 * frame.ppm)
+            p.setPen(QPen(txt, 4))
+            p.drawLine(frame.P((0.28, 0.0)), frame.P((0.38, 0.3)))
+            p.drawArc(int(frame.X(0.3)), int(frame.Y(0.42)), 16, 16, 0, 180 * 16)
+        elif kind == "axe":
+            p.setPen(QPen(QColor(120, 85, 50), 6))
+            p.drawLine(frame.P((-0.25, -0.3)), frame.P((0.2, 0.3)))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(txt)
+            p.drawPolygon(QPolygonF([frame.P((0.05, 0.32)), frame.P((0.38, 0.22)), frame.P((0.2, 0.36))]))
+        elif kind == "mask":
+            p.setBrush(QColor(40, 90, 190))
+            p.drawRoundedRect(int(frame.X(-0.3)), int(frame.Y(0.12)), int(0.6 * frame.ppm), int(0.24 * frame.ppm), 10, 10)
+            p.setBrush(QColor(200, 230, 255))
+            p.drawEllipse(frame.P((-0.13, 0.0)), 0.1 * frame.ppm, 0.08 * frame.ppm)
+            p.drawEllipse(frame.P((0.13, 0.0)), 0.1 * frame.ppm, 0.08 * frame.ppm)
+        elif kind == "climb":
+            p.setBrush(acc)
+            p.drawPolygon(QPolygonF([frame.P((-0.42, -0.35)), frame.P((0.05, 0.32)), frame.P((0.18, 0.32)),
+                                     frame.P((0.3, -0.35))]))
+            p.setPen(QPen(QColor(90, 70, 50), 2))
+            p.drawLine(frame.P((0.11, 0.32)), frame.P((0.11, 0.45)))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(220, 60, 50))
+            p.drawPolygon(QPolygonF([frame.P((0.11, 0.45)), frame.P((0.25, 0.41)), frame.P((0.11, 0.37))]))
+        elif kind == "bicycle":
+            p.setPen(QPen(txt, 4))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            for x in (-0.22, 0.22):
+                p.drawEllipse(frame.P((x, -0.15)), 0.17 * frame.ppm, 0.17 * frame.ppm)
+            p.setPen(QPen(acc, 4))
+            p.drawPolyline(QPolygonF([frame.P((-0.22, -0.15)), frame.P((-0.05, 0.12)), frame.P((0.15, 0.12)),
+                                      frame.P((0.22, -0.15))]))
+            p.drawLine(frame.P((-0.05, 0.12)), frame.P((0.0, -0.15)))
+        elif kind == "marker":
+            p.setBrush(QColor(250, 249, 244))
+            p.drawRect(int(frame.X(-0.32)), int(frame.Y(0.34)), int(0.64 * frame.ppm), int(0.68 * frame.ppm))
+            p.setPen(QPen(QColor(40, 55, 170), 3))
+            path = QPainterPath(frame.P((-0.2, -0.1)))
+            path.cubicTo(frame.P((-0.1, 0.25)), frame.P((0.1, -0.25)), frame.P((0.2, 0.1)))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawPath(path)
+        elif kind == "dog":
+            p.setBrush(txt)
+            p.drawRoundedRect(int(frame.X(-0.25)), int(frame.Y(0.05)), int(0.45 * frame.ppm), int(0.16 * frame.ppm), 8, 8)
+            p.drawEllipse(frame.P((0.26, 0.1)), 0.1 * frame.ppm, 0.09 * frame.ppm)
+            p.setPen(QPen(txt, 5))
+            for x in (-0.2, -0.1, 0.08, 0.15):
+                p.drawLine(frame.P((x, -0.1)), frame.P((x, -0.3)))
+            p.drawLine(frame.P((-0.25, 0.0)), frame.P((-0.38, 0.15)))
+    return draw
+
+
+SIMPLE_ICONS = {
+    "ball": _items_icon([("ball", 0.0, 0.0, 0.22, (0.9, 0.35, 0.25))]),
+    "blocks": _items_icon([("box", 0.0, -0.25, (0.3, 0.15, 0.0), (0.8, 0.5, 0.3)),
+                           ("box", 0.0, -0.1, (0.24, 0.15, 0.0), (0.4, 0.6, 0.8)),
+                           ("box", 0.0, 0.05, (0.18, 0.15, 0.0), (0.9, 0.8, 0.3))]),
+    "bubbles": _items_icon([("bubble", -0.1, 0.05, 0.18, (0.8, 0.9, 1.0)), ("bubble", 0.18, -0.12, 0.1, (0.8, 0.9, 1.0))]),
+    "plane": _items_icon([("plane", 0.0, 0.0, 0.2, (0.95, 0.95, 0.9))]),
+    "boomerang": _items_icon([("boomerang", 0.0, 0.0, 0.6, (0.85, 0.55, 0.25))]),
+    "rod": _items_icon([("bobber", 0.0, 0.0, 0.08, (0.95, 0.3, 0.2))]),
+    "rope": _shape_icon("rope"), "axe": _shape_icon("axe"), "mask": _shape_icon("mask"),
+    "dive": _shape_icon("mask"), "climb": _shape_icon("climb"), "dog": _shape_icon("dog"),
+    "bicycle": _shape_icon("bicycle"), "marker": _shape_icon("marker"),
+}
 
 
 def toy_icon(name, colors):
@@ -63,6 +170,8 @@ def toy_icon(name, colors):
         p.setBrush(QColor(colors["text"]))
         p.drawEllipse(QPointF(ICON * 0.35, ICON * 0.45), 7, 7)
         p.drawRoundedRect(ICON * 0.42, ICON * 0.47, ICON * 0.35, 8, 4, 4)
+    elif name in SIMPLE_ICONS:
+        SIMPLE_ICONS[name](p, Frame, colors)
     elif name == "explore":
         # холмы и тропинка со следами - «гулять»
         from PySide6.QtGui import QPainterPath, QPen
@@ -119,7 +228,7 @@ class ActivityCard(QWidget):
         buttons = QHBoxLayout()
         buttons.setSpacing(theme.GAP)
         self.offer = None
-        if toy is not None:
+        if toy is not None and not toy.tool:
             self.offer = button("Предложить", "primary", lambda: page.offer(name))
             self.offer.setToolTip("Положить рядом с ним. Возьмёт или нет - решит сам")
             buttons.addWidget(self.offer)
@@ -151,6 +260,32 @@ class ActivityCard(QWidget):
             state = "уже пловец - глубокая вода ему открыта" if sw.can_swim() else "пока не пловец"
             self.numbers.setText(f"{sw.attempts} {plural(sw.attempts, 'попытка', 'попытки', 'попыток')}, {state}."
                                  + ("" if deep else " В этом мире глубокой воды нет."))
+        elif self.toy is not None and self.toy.tool and life is not None:
+            where = {"chest": "в сундуке", "carried": "у него"}.get(life.inv.where.get(self.name), "лежит в мире")
+            self.numbers.setText(f"{TOOL_NOTES.get(self.name, '')} Сейчас {where}.")
+        elif self.name in ("dog", "climb", "dive") and life is not None:
+            from toys import base as toy_base
+            jname = {"dive": "mask"}.get(self.name, self.name)
+            j = life.toy_journals.get(jname) or toy_base.journal(life.body_seed, jname)
+            n = len(j.entries)
+            text = f"{n} {plural(n, 'попытка', 'попытки', 'попыток')}"
+            if self.name == "dog":
+                text += ("; собака " + ("ручная" if life.dog.tamed else f"доверяет на {life.dog.trust:.2f}")
+                         if life.dog is not None else "; в этом мире собаки сейчас нет")
+            elif self.name == "climb":
+                text += f"; вершин покорено {len(life.climb.conquered)}, флагов {len(life.climb.flags)}"
+                text += "" if life.world.mountains else "; в этом мире гор нет"
+            self.numbers.setText(text + ".")
+        elif self.toy is not None and life is not None:
+            from toys import base as toy_base
+            j = life.toy_journals.get(self.name) or toy_base.journal(life.body_seed, self.name)
+            n = len(j.entries)
+            best = max([float(e.get("success", 0.0)) for e in j.entries] or [0.0])
+            where = {"chest": "в сундуке", "carried": "у него"}.get(life.inv.where.get(self.name), "лежит в мире")
+            self.numbers.setText(f"{n} {plural(n, 'попытка', 'попытки', 'попыток')}"
+                                 + (f", лучший успех {best:.2f}" if n else "") + f"; сейчас {where}.")
+            if self.offer is not None:
+                self.offer.setEnabled(life.inv.where.get(self.name) not in ("carried", "flying", "dog"))
         elif self.name == "explore" and life is not None:
             self.numbers.setText(f"Изучено {life.walk.places.explored() * 100:.0f} % мира, "
                                  f"разворотов по своей воле {life.walk.turns}, осмотрелся {life.walk.looks} раз.")
@@ -186,7 +321,7 @@ class CatalogPage(Page):
         self.grid.setHorizontalSpacing(theme.GAP_BIG)
         self.grid.setVerticalSpacing(theme.GAP_BIG)
         self.cards = {}
-        items = [(t.name, t.title, "", t) for t in registry.TOYS.values()]
+        items = [(t.name, t.title, TOOL_NOTES.get(t.name, TOY_NOTES.get(t.name, "")), t) for t in registry.TOYS.values()]
         items += [(n, ACT_TITLES[n], ACT_NOTES[n], None) for n in ACT_TITLES]
         notes = {"guitar": "Учит мелодии из песенника и свои, играет своё. Сеть-музыкант, звук струн - синтез."}
         for i, (name, title, note, toy) in enumerate(items):

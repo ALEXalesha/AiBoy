@@ -27,6 +27,7 @@ from music.session import Guitarist  # noqa: E402
 from music.songbook import Songbook  # noqa: E402
 
 BODIES = (7, 21, 34, 55, 89)
+FLICKER = 15.0          # с
 
 
 def sessions(body_seed, minutes, freq="sometimes", world_seed=None, width=160, log=None, chest=None):
@@ -68,6 +69,35 @@ def sessions(body_seed, minutes, freq="sometimes", world_seed=None, width=160, l
         cur["unfinished"] = True
         out.append(cur)
     return out, trace, phrases, life.laid
+
+
+def all_sessions(body_seed, minutes, world_seed=None, width=160, dog=True):
+    """Все сеансы игр человечка за minutes минут (гитара, игрушки, плавание, собака, гора,
+    маска): [(занятие, длина, с)]. Сеанс - пока выбор занятий держит это занятие подряд;
+    незаконченный в конце - с пометкой (длина отрицательная - не в счёт медианы, но в «не дольше»)."""
+    from toys import registry
+    play = {t.name for t in registry.TOYS.values() if not t.tool} | {"swim", "dog", "climb", "dive"}
+    d = tempfile.mkdtemp(prefix="aiboy-all-")
+    g = Guitarist(Musician(seed=body_seed), Journal(os.path.join(d, "j.json")), Songbook(os.path.join(d, "s.json")),
+                  rng=np.random.default_rng(body_seed))
+    m = models.load()
+    life = Life(m, world_seed or 1000 + body_seed, body_seed, width, models.starter_brain(), guitarist=g,
+                guitar_freq="sometimes", dog_mode="often" if dog else "never")
+    if dog and life.dog is None:
+        life.spawn_dog(near=True)
+    out, cur, start = [], None, 0.0
+    for _ in range(int(minutes * 3600)):
+        life.tick()
+        now = life.choice.current
+        if now != cur:
+            # меньше FLICKER - не сеанс: выбрал гитару, а она в сундуке - выбор на миг уходит в «гулять»,
+            # пока он идёт за ней (так устроено с 1.1.0), сеанс начнётся, когда сядет играть
+            if cur in play and life.time - start >= FLICKER:
+                out.append((cur, life.time - start))
+            cur, start = now, life.time
+    if cur in play:
+        out.append((cur, -(life.time - start)))    # не кончился к концу замера
+    return out
 
 
 def main():

@@ -1,8 +1,10 @@
-"""Экран «Попытки»: журнал гитары текущего человечка - список (дата, мелодия, оценка, 👍/👎),
-«Слушать», «Сравнить с первой по этой мелодии» (первая, потом выбранная), оценка выбранной
-и график: как росла похожесть на мелодию (или приятность в свободной игре) по попыткам.
+"""Экран «Попытки»: журнал любого занятия текущего человечка - гитары, каждой игрушки, собаки,
+маски, горы (выбор сверху).
 
-Звук каждый раз синтезируется заново по нотам из журнала.
+Гитара: список (дата, мелодия, оценка, 👍/👎), «Слушать», «Сравнить с первой по этой мелодии»,
+график похожести; звук синтезируется заново по нотам. Остальные занятия: список (дата, вид,
+успех, удовольствие), «Повтор» - как это было (полёт мяча и бумеранга, путь велосипеда, рисунок,
+башня, нырок, подъём), «Сравнить с первой» - первая и выбранная рядом, график успеха.
 """
 import time
 
@@ -16,6 +18,127 @@ from game.ui import Page, button, card, label
 from music.guitar import Note
 
 FREE = "Свободная игра"
+EXTRA = (("dog", "Собака"), ("mask", "Маска для ныряния"), ("climb", "Гора"))
+
+
+def activities():
+    """[(имя, название)] - гитара, игрушки (не снаряжение), собака, маска, гора."""
+    from toys import registry
+    out = [(t.name, t.title) for t in registry.TOYS.values() if not t.tool]
+    return out + list(EXTRA)
+
+
+def kind_of(name, e):
+    """Что это была за попытка - коротко."""
+    if name == "ball":
+        return {"kick": "пнул", "throw": "бросил", "catch": "поймать"}.get(e.get("kind"), e.get("kind", ""))
+    if name == "rod":
+        return e.get("why", "")
+    if name == "blocks":
+        return f"башня из {e.get('blocks', 0)}"
+    if name == "bicycle":
+        return "упал" if e.get("fell") else f"{e.get('distance', 0):.0f} м"
+    if name == "marker":
+        return f"красота {e.get('beauty', 0):.2f}"
+    if name == "dog":
+        return {"tame": "приручал", "throw": "бросил мяч", "pet": "гладил"}.get(e.get("kind"), e.get("kind", ""))
+    if name == "mask":
+        return ("увидел рыбу" if e.get("seen") else "пусто") + f", {e.get('depth', 0):.1f} м"
+    if name == "climb":
+        route = {"easy": "лёгким путём", "face": "по стене", "rope": "с верёвкой", "axe": "с ледорубом"}.get(e.get("route"), "")
+        return ("вершина, " if e.get("top") else f"{e.get('height', 0):.0f} м, ") + route
+    return str(e.get("kind", ""))
+
+
+class Replay(QWidget):
+    """Повтор попытки: траектория (мяч, бумеранг, самолётик, велосипед, поплавок) рисуется за
+    2.5 с, рисунок - штрих за штрихом, башня - кубик за кубиком, нырок и подъём - столбиком.
+    Две попытки (первая и выбранная) - рядом."""
+
+    def __init__(self, colors):
+        super().__init__()
+        self.colors = colors
+        self.items = []
+        self.t = 1.0
+        self.setMinimumHeight(150)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        from PySide6.QtCore import QTimer
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._tick)
+
+    def show_entries(self, name, entries):
+        self.items = [(name, e) for e in entries]
+        self.t = 0.0
+        self.timer.start(33)
+        self.update()
+
+    def _tick(self):
+        self.t = min(1.0, self.t + 0.033 / 2.5)
+        if self.t >= 1.0:
+            self.timer.stop()
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        col = self.colors
+        if not self.items:
+            p.setPen(QColor(col["muted"]))
+            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Выберите попытку и нажмите «Повтор»")
+            p.end()
+            return
+        w = self.width() / len(self.items)
+        for k, (name, e) in enumerate(self.items):
+            box = QRectF(k * w + 8, 8, w - 16, self.height() - 16)
+            p.setPen(QPen(QColor(col["grid"]), 1))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(box, 8, 8)
+            self._draw(p, box.adjusted(10, 10, -10, -22), name, e)
+            p.setPen(QColor(col["muted"]))
+            p.drawText(QRectF(box.left(), box.bottom() - 20, box.width(), 18), Qt.AlignmentFlag.AlignCenter,
+                       f"попытка {e.get('id', '')}: {kind_of(name, e)}")
+        p.end()
+
+    def _draw(self, p, box, name, e):
+        accent = QColor(self.colors["accent"])
+        pts = None
+        if isinstance(e.get("drawing"), dict):
+            pts = e["drawing"].get("points")
+        elif e.get("trace"):
+            pts = e["trace"]
+        if pts:
+            xs = [float(q[0]) for q in pts]
+            ys = [float(q[1]) for q in pts]
+            span = max(max(xs) - min(xs), max(ys) - min(ys), 1e-3)
+            sc = min(box.width(), box.height()) / span
+
+            def at(x, y):
+                return QPointF(box.center().x() + (x - (max(xs) + min(xs)) / 2) * sc,
+                               box.center().y() - (y - (max(ys) + min(ys)) / 2) * sc)
+            n = max(2, int(len(pts) * self.t))
+            path = QPainterPath(at(xs[0], ys[0]))
+            for x, y in zip(xs[1:n], ys[1:n]):
+                path.lineTo(at(x, y))
+            p.setPen(QPen(accent, 2.5))
+            p.drawPath(path)
+            p.setBrush(accent)
+            p.drawEllipse(at(xs[n - 1], ys[n - 1]), 4, 4)
+            return
+        if name == "blocks":
+            n = int(round(e.get("blocks", 0) * self.t))
+            for i in range(n):
+                r = QRectF(box.center().x() - 24, box.bottom() - (i + 1) * 18, 48, 16)
+                p.setPen(QPen(QColor(self.colors["text"]), 1))
+                p.setBrush(accent)
+                p.drawRect(r)
+            return
+        share = float(e.get("share", e.get("success", 0.0)))
+        if name == "mask":
+            share = min(1.0, float(e.get("depth", 0.0)) / 3.0)
+        h = box.height() * share * self.t
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(accent)
+        p.drawRoundedRect(QRectF(box.center().x() - 14, box.bottom() - h, 28, h), 4, 4)
 
 
 def notes_of(entry):
@@ -105,6 +228,12 @@ class AttemptsPage(Page):
         outer.setSpacing(theme.GAP_BIG)
         top = QHBoxLayout()
         top.addWidget(label("Попытки", "heading"))
+        self.activity = QComboBox()
+        self.activity.setMinimumWidth(220)
+        for name, title in activities():
+            self.activity.addItem(title, name)
+        self.activity.currentIndexChanged.connect(self.refresh)
+        top.addWidget(self.activity)
         top.addStretch(1)
         self.who = label("", "muted")
         top.addWidget(self.who)
@@ -153,13 +282,27 @@ class AttemptsPage(Page):
         rl.addWidget(self.chart, 1)
         self.chart_note = label("", "hint", wrap=True)
         rl.addWidget(self.chart_note)
+        self.replay = Replay(window.colors())
+        self.replay.hide()
+        rl.addWidget(self.replay, 1)
         body.addWidget(right, 2)
         outer.addLayout(body, 1)
         self.rows = []
 
+    def current(self):
+        return self.activity.currentData() or "guitar"
+
     def journal(self):
         life = self.window_.observe.life
-        return None if life is None or life.guitarist is None else life.guitarist.journal
+        name = self.current()
+        if life is None:
+            return None
+        if name == "guitar":
+            return None if life.guitarist is None else life.guitarist.journal
+        if name not in life.toy_journals:
+            from toys import base as toy_base
+            life.toy_journals[name] = toy_base.journal(life.body_seed, name)
+        return life.toy_journals[name]
 
     def on_show(self):
         self.refresh()
@@ -167,8 +310,21 @@ class AttemptsPage(Page):
     def apply_theme(self, name):
         self.chart.colors = theme.palette(name)
         self.chart.update()
+        self.replay.colors = theme.palette(name)
+        self.replay.update()
 
     def refresh(self):
+        if self.current() != "guitar":
+            self.refresh_other()
+            return
+        self.table.setHorizontalHeaderLabels(["№", "Когда", "Мелодия", "Оценка", "Вы"])
+        self.listen_button.setText("▶ Слушать")
+        for b in (self.like, self.dislike):
+            b.setEnabled(True)
+        self.tune.show()
+        self.replay.hide()
+        self.note.setText("Каждая попытка сыграть на гитаре: ноты, оценка и ваша 👍/👎. Звук синтезируется "
+                          "заново по нотам.")
         j = self.journal()
         life = self.window_.observe.life
         self.who.setText("" if life is None else f"человечек {life.body.name}")
@@ -199,7 +355,39 @@ class AttemptsPage(Page):
         self.tune.blockSignals(False)
         self.refresh_chart()
 
+    def refresh_other(self):
+        """Не гитара: журнал занятия - вид, успех, удовольствие; график успеха; повтор."""
+        name = self.current()
+        j = self.journal()
+        life = self.window_.observe.life
+        self.who.setText("" if life is None else f"человечек {life.body.name}")
+        self.table.setHorizontalHeaderLabels(["№", "Когда", "Что", "Успех", "Удовольствие"])
+        self.listen_button.setText("▶ Повтор")
+        for b in (self.like, self.dislike):
+            b.setEnabled(name == "marker")           # рисункам - ваша оценка учит его вкус
+        self.tune.hide()
+        self.replay.show()
+        self.note.setText(f"Попытки занятия «{self.activity.currentText()}»: что вышло, успех от 0 до 1 и "
+                          "удовольствие. «Повтор» - как это было, «Сравнить с первой» - рядом с самой первой.")
+        entries = list(reversed(j.entries)) if j else []
+        self.rows = entries
+        self.table.setRowCount(len(entries))
+        for r, e in enumerate(entries):
+            when = time.strftime("%d.%m %H:%M", time.localtime(e.get("time", 0)))
+            cells = (str(e.get("id", "")), when, kind_of(name, e), f"{e.get('success', 0):.2f}",
+                     f"{e.get('pleasure', 0):.2f}" if e.get("pleasure") is not None else "")
+            for c, text in enumerate(cells):
+                self.table.setItem(r, c, QTableWidgetItem(text))
+        if entries and not self.table.selectedItems():
+            self.table.selectRow(0)
+        self.status.setText("" if entries else "Пока ни одной попытки: он выбирает занятие сам, когда захочет.")
+        pts = [(i, float(e.get("success", 0.0))) for i, e in enumerate(j.entries if j else [])]
+        self.chart.set_data(pts, "A")
+        self.chart_note.setText("Успех каждой попытки от 0 до 1; линия - среднее по 10.")
+
     def refresh_chart(self):
+        if self.current() != "guitar":
+            return
         j = self.journal()
         data = self.tune.currentData()
         tune = None if data in ("", None) else data
@@ -238,6 +426,10 @@ class AttemptsPage(Page):
         e = self.selected()
         if e is None:
             return
+        if self.current() != "guitar":
+            self.replay.show_entries(self.current(), [e])
+            self.status.setText(f"Повтор попытки {e.get('id')}")
+            return
         self.play([e], f"попытка {e['id']}")
         self.status.setText(f"Играет попытка {e['id']}")
 
@@ -246,6 +438,11 @@ class AttemptsPage(Page):
         j = self.journal()
         if e is None or j is None:
             return
+        if self.current() != "guitar":
+            first = j.entries[0] if j.entries else e
+            self.replay.show_entries(self.current(), [first, e])
+            self.status.setText(f"Слева - самая первая попытка ({first.get('id')}), справа - эта ({e.get('id')})")
+            return
         first = j.first_of(e.get("tune"))
         self.play([first, e], f"сравнение {first['id']} и {e['id']}")
         self.status.setText(f"Сначала первая попытка ({first['id']}), потом эта ({e['id']})")
@@ -253,6 +450,16 @@ class AttemptsPage(Page):
     def rate(self, rating):
         e = self.selected()
         life = self.window_.observe.life
+        if self.current() == "marker":
+            heads = life.toy_heads.get("marker") if life is not None else None
+            d = e.get("drawing") if e else None
+            if heads is not None and isinstance(d, dict) and hasattr(heads, "taste"):
+                import numpy as np
+                from toys.marker import features
+                heads.taste.rate(features(np.array(d["points"]), np.array(d.get("pens", [0.0] * 24))), rating)
+                e["rating"] = rating
+                self.status.setText(f"Рисунок {e.get('id')}: {'👍' if rating > 0 else '👎'} - его вкус учится")
+            return
         if e is None or life is None or life.guitarist is None:
             return
         g = life.guitarist

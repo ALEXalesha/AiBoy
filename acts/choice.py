@@ -34,6 +34,9 @@ FLAT_SPREAD = 0.06
 FLAT_BOREDOM = 0.05
 MIN_ATTEMPTS = 3
 MIN_WORLD = 20.0            # с
+MIN_PLAY = 90.0             # с - с игрушкой не меньше (пузыри, падения с велосипеда - три попытки за 20 с:
+                            # он прыгал с игрушки на игрушку, медиана сеанса 1.5 мин; гитара - как в 1.1.0)
+NEW_TOY = 0.42              # «нравится» игрушки, в которую ещё не играл: любопытно, но не сильнее знакомой
 URGENT = 0.8                # нужда выше - гистерезис не держит
 T = 0.02                    # температура выбора
 STICK = 0.2                 # прибавка к тяге текущего занятия - гистерезис
@@ -156,6 +159,9 @@ class Choice:
             return True
         if self.current == "explore":
             return self.since >= MIN_WORLD
+        a = self.acts.get(self.current)
+        if a is not None and a.play and self.current != "guitar" and self.since < MIN_PLAY:
+            return False                 # игрушку не бросает через полминуты (попытки бывают по 5 с)
         return self.attempts >= MIN_ATTEMPTS
 
     def pulls(self, available, urgency=None):
@@ -175,11 +181,21 @@ class Choice:
             available = list(available) + [self.current]
         if not self.can_switch(urgency):
             return self.current
-        probs = self.probabilities(available, urgency)
-        names = list(probs)
-        pick = names[int(self.rng.choice(len(names), p=[probs[n] for n in names]))]
-        if pick != self.current:
-            self.switch(pick)
+        # остаться или сменить - сравнение с лучшим из прочих, а не softmax по всем: с восемью
+        # игрушками по 0.5 вероятность «сменить» складывалась из восьми долек, и он прыгал с
+        # игрушки на игрушку через минуту (замер: медиана сеанса 1.5 мин); потом - на что сменить
+        p = self.pulls(available, urgency)
+        cur = p.get(self.current, -math.inf) + STICK
+        alts = [n for n in p if n != self.current]
+        if not alts:
+            return self.current
+        best = max(p[n] for n in alts)
+        if self.rng.random() >= 1.0 / (1.0 + math.exp(-(best - cur) / T)):
+            return self.current
+        z = np.array([p[n] for n in alts]) / T
+        z = np.exp(z - z.max())
+        pick = alts[int(self.rng.choice(len(alts), p=z / z.sum()))]
+        self.switch(pick)
         return pick
 
     def switch(self, name):

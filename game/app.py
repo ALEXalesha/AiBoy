@@ -8,8 +8,8 @@ import threading
 import time
 
 import numpy as np
-from PySide6.QtCore import QElapsedTimer, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPixmap
+from PySide6.QtCore import QElapsedTimer, QPointF, QRectF, Qt, QTimer
+from PySide6.QtGui import QColor, QImage, QLinearGradient, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QFrame, QGridLayout,
                                QHBoxLayout, QHeaderView, QLabel, QMainWindow, QMessageBox, QPushButton,
                                QScrollArea, QSlider, QStackedWidget, QTableWidget, QTableWidgetItem,
@@ -23,8 +23,8 @@ from game.chat import ChatView, clock
 from game.gallery import Gallery, make_entry
 from game.icon import app_icon
 from game.life import Life
-from game.settings import (FREQ_NAMES, GUITAR_FAST_NAMES, GUITAR_FREQ_NAMES, GUITAR_MODE_NAMES, SIZE_NAMES,
-                           SPEEDS, WORLD_WIDTH, Settings)
+from game.settings import (BIRD_NAMES, DOG_NAMES, FREQ_NAMES, GUITAR_FAST_NAMES, GUITAR_FREQ_NAMES, GUITAR_MODE_NAMES,
+                           SIZE_NAMES, SPEEDS, WORLD_WIDTH, Settings)
 from game.stats import Stats
 from game.version import VERSION
 from game.view import RingMap, WorldView, draw_scene, thumbnail
@@ -500,6 +500,7 @@ class ObservePage(Page):
         self.handle(life, life.tick())
         if life.playing:
             w.stats.guitar_time += DT
+        w.stats.add_activity(life.choice.current, DT)
         self.curve_clock += DT
         if self.curve_clock >= CURVE_EVERY:
             self.curve_clock = 0.0
@@ -545,6 +546,8 @@ class ObservePage(Page):
                         w.audio.play(audio, data[0], channel="toys")
             elif kind == "toy_attempt":
                 w.stats.attempts += 1
+            if kind in ("summit", "flag", "toy_attempt", "dive", "dog_brought", "birds_came"):
+                w.stats.add_life_event(kind, data)
             elif kind in ("toy_done", "put_toy"):
                 self.save_guitar()
             if kind in ("pickup", "put", "sit", "stand"):
@@ -583,8 +586,54 @@ class ObservePage(Page):
 # --- галерея ---
 
 
+def picture(kind, e, size, colors):
+    """Картинка рисунка (на листе) или улова (рыба, какой была) для «Галереи»."""
+    from PySide6.QtGui import QPainterPath, QPolygonF
+    img = QImage(size[0], size[1], QImage.Format.Format_ARGB32)
+    img.fill(QColor(colors["surface2"]))
+    p = QPainter(img)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    w, h = size
+    if kind == "drawings":
+        sheet = QRectF(w * 0.18, h * 0.08, w * 0.64, h * 0.84)
+        p.setPen(QPen(QColor(180, 180, 180), 1))
+        p.setBrush(QColor(250, 249, 244))
+        p.drawRect(sheet)
+        pts = (e.get("drawing") or {}).get("points") or []
+        if len(pts) >= 2:
+            xs = [q[0] for q in pts]
+            ys = [q[1] for q in pts]
+            span = max(max(xs) - min(xs), max(ys) - min(ys), 1e-3)
+            sc = min(sheet.width(), sheet.height()) * 0.8 / span
+            cx, cy = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2
+            path = QPainterPath(QPointF(sheet.center().x() + (xs[0] - cx) * sc, sheet.center().y() - (ys[0] - cy) * sc))
+            for x, y in zip(xs[1:], ys[1:]):
+                path.lineTo(QPointF(sheet.center().x() + (x - cx) * sc, sheet.center().y() - (y - cy) * sc))
+            p.setPen(QPen(QColor(40, 55, 170), 2.2))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawPath(path)
+    else:
+        f = e.get("fish") or {}
+        col = f.get("color") or [0.5, 0.6, 0.7]
+        body = QColor(int(col[0] * 255), int(col[1] * 255), int(col[2] * 255))
+        L = w * 0.55 * min(1.0, 0.4 + float(f.get("length", 0.3)) * 2.0)
+        H = L * max(0.25, float(f.get("height", 0.1)) / max(float(f.get("length", 0.3)), 0.05))
+        c = QPointF(w / 2, h / 2)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(body)
+        tail = float(f.get("tail", 0.5))
+        p.drawPolygon(QPolygonF([QPointF(c.x() - L * 0.4, c.y()), QPointF(c.x() - L * (0.7 + 0.2 * tail), c.y() - H * 0.5),
+                                 QPointF(c.x() - L * (0.7 + 0.2 * tail), c.y() + H * 0.5)]))
+        p.drawEllipse(c, L / 2, H / 2)
+        p.setBrush(QColor(20, 20, 20))
+        p.drawEllipse(QPointF(c.x() + L * 0.3, c.y() - H * 0.1), max(1.5, H * 0.12), max(1.5, H * 0.12))
+    p.end()
+    return img
+
+
 class GalleryPage(Page):
     THUMB = (264, 150)
+    MODES = (("worlds", "Миры"), ("drawings", "Рисунки"), ("catch", "Улов"))
 
     def __init__(self, window):
         super().__init__(window)
@@ -593,12 +642,21 @@ class GalleryPage(Page):
         outer.setContentsMargins(24, 16, 24, 16)
         top = QHBoxLayout()
         top.addWidget(label("Галерея", "heading"))
+        self.mode = "worlds"
+        self.mode_buttons = {}
+        for key, text in self.MODES:
+            b = button(text, None, lambda _=False, k=key: self.set_mode(k))
+            b.setCheckable(True)
+            b.setChecked(key == "worlds")
+            self.mode_buttons[key] = b
+            top.addWidget(b)
         top.addStretch(1)
         self.count_label = label("", "muted")
         top.addWidget(self.count_label)
         outer.addLayout(top)
-        outer.addWidget(label("Каждый новый мир с человечком попадает сюда сам. Открыть - прожить в нём "
-                              "снова; удалить - только из галереи.", "hint", wrap=True))
+        self.mode_hint = label("Каждый новый мир с человечком попадает сюда сам. Открыть - прожить в нём "
+                               "снова; удалить - только из галереи.", "hint", wrap=True)
+        outer.addWidget(self.mode_hint)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.grid_host = QWidget()
@@ -634,12 +692,72 @@ class GalleryPage(Page):
             self.cache[key] = QPixmap.fromImage(img)
         return self.cache[key]
 
+    HINTS = {"worlds": "Каждый новый мир с человечком попадает сюда сам. Открыть - прожить в нём снова; "
+                       "удалить - только из галереи.",
+             "drawings": "Всё, что нарисовал фломастером текущий человечек: красота - на его вкус (его сеть вкуса "
+                         "плюс ваши 👍/👎 в «Попытках»).",
+             "catch": "Рыбы, которых поймал на удочку текущий человечек: вид рыбы - из сети рыб того пруда."}
+
+    def set_mode(self, mode):
+        self.mode = mode
+        for k, b in self.mode_buttons.items():
+            b.setChecked(k == mode)
+        self.mode_hint.setText(self.HINTS[mode])
+        self.refresh()
+
+    def journal_items(self):
+        life = self.window_.observe.life
+        if life is None:
+            return []
+        from toys import base as toy_base
+        name = "marker" if self.mode == "drawings" else "rod"
+        j = life.toy_journals.get(name) or toy_base.journal(life.body_seed, name)
+        if self.mode == "drawings":
+            return [e for e in j.entries if isinstance(e.get("drawing"), dict)]
+        return [e for e in j.entries if e.get("caught") and e.get("fish")]
+
+    def refresh_items(self):
+        """Рисунки или улов - карточки с картинкой, датой и подписью."""
+        import time as _time
+        items = list(reversed(self.journal_items()))
+        n = len(items)
+        word = (plural(n, "рисунок", "рисунка", "рисунков") if self.mode == "drawings"
+                else plural(n, "рыба", "рыбы", "рыб"))
+        self.count_label.setText(f"{n} {word}")
+        cols = max(1, (self.width() - 60) // (self.THUMB[0] + 2 * theme.PAD + theme.GAP_BIG + 4))
+        if not items:
+            self.grid.addWidget(label("Пока пусто: он рисует и рыбачит, когда сам захочет.", "hint"), 0, 0)
+        for i, e in enumerate(items[:60]):
+            c = QFrame()
+            c.setObjectName("thumb")
+            lay = QVBoxLayout(c)
+            lay.setContentsMargins(theme.PAD, theme.PAD, theme.PAD, theme.PAD)
+            lay.setSpacing(theme.GAP)
+            pic = QLabel()
+            pic.setPixmap(QPixmap.fromImage(picture(self.mode, e, self.THUMB, self.window_.colors())))
+            pic.setFixedSize(*self.THUMB)
+            lay.addWidget(pic)
+            when = _time.strftime("%d.%m %H:%M", _time.localtime(e.get("time", 0)))
+            lay.addWidget(label(f"№{e.get('id', '')} · {when}", "section"))
+            if self.mode == "drawings":
+                lay.addWidget(label(f"красота {e.get('beauty', 0):.2f}", "hint"))
+            else:
+                lay.addWidget(label(f"длина {100 * float(e['fish'].get('length', 0)):.0f} см", "hint"))
+            self.grid.addWidget(c, i // cols, i % cols)
+
     def refresh(self):
         while self.grid.count():
             item = self.grid.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            old = item.widget()
+            if old is not None:
+                old.setParent(None)              # сразу, не потом: иначе старые карточки видны под новыми
+                old.deleteLater()
         self.cards = {}
+        if self.mode != "worlds":
+            self.refresh_items()
+            self.grid.activate()
+            self.grid_host.adjustSize()          # высота сетки - под новые карточки (кадр: сжимались в полосы)
+            return
         entries = self.window_.gallery.entries
         n = len(entries)
         self.count_label.setText(f"{n} {plural(n, 'мир', 'мира', 'миров')}")
@@ -776,6 +894,18 @@ class StatsPage(Page):
         gl.addWidget(self.taste_line)
         col.addWidget(gcard)
 
+        acard = card()
+        al = QVBoxLayout(acard)
+        al.setContentsMargins(18, 14, 18, 14)
+        al.addWidget(label("Занятия", "section"))
+        self.fav_line = label("", "muted", wrap=True)
+        al.addWidget(self.fav_line)
+        self.acts = table(["Занятие", "Время", "Доля"])
+        al.addWidget(self.acts)
+        self.acts_lines = label("", "hint", wrap=True)
+        al.addWidget(self.acts_lines)
+        col.addWidget(acard)
+
         two = QHBoxLayout()
         two.setSpacing(theme.GAP_BIG)
         words = card()
@@ -811,7 +941,7 @@ class StatsPage(Page):
         self.big["distance"].setText(meters(s.distance))
         for k in ("phrases", "jumps", "attempts"):
             self.big[k].setText(str(getattr(s, k)))
-        self.guitar_line.setText(f"С гитарой - {clock(s.guitar_time)}, попыток {s.attempts}, "
+        self.guitar_line.setText(f"С гитарой - {clock(s.guitar_time)}, попыток {s.guitar_attempts}, "
                                  f"оценок 👍 {s.likes} и 👎 {s.dislikes}, падений в мире - {s.falls}.")
         best = sorted(s.best.items(), key=lambda kv: -kv[1])
         self.tunes.setRowCount(len(best))
@@ -826,6 +956,7 @@ class StatsPage(Page):
             acc = life.guitarist.taste.accuracy()
         self.taste_line.setText("Вкус угадывает ваши оценки: " + (f"{acc * 100:.0f} % (догадка - до того, как "
                                 "увидел оценку)" if acc is not None else "пока оценок мало") + ".")
+        self.refresh_activities(s, life)
         self.chart.set_data(s.curve)
         b = w.brain
         pp = models.passport("brain").get("honest_training_time", {})
@@ -844,6 +975,40 @@ class StatsPage(Page):
             for c, text in enumerate((e["world"], e["human"], f"{e.get('interest', 0):.2f}", clock(e.get("lived", 0)))):
                 self.best.setItem(r, c, QTableWidgetItem(text))
         fit_height(self.best)
+
+    ACT_NAMES = {"explore": "Гулять", "guitar": "Гитара", "swim": "Плавать", "eat": "Есть", "drink": "Пить",
+                 "rest": "Отдыхать", "dog": "Собака", "climb": "Гора", "dive": "Нырять в маске"}
+
+    def refresh_activities(self, s, life):
+        """Сколько времени на что ушло, любимое занятие и итоги занятий 2.0."""
+        from toys import base as toy_base
+        from toys import registry
+        names = dict(self.ACT_NAMES)
+        names.update({t.name: t.title for t in registry.TOYS.values()})
+        total = sum(s.activity.values()) or 1.0
+        rows = sorted(s.activity.items(), key=lambda kv: -kv[1])[:12]
+        self.acts.setRowCount(len(rows))
+        for r, (k, v) in enumerate(rows):
+            for c, text in enumerate((names.get(k, k), clock(v), f"{100 * v / total:.0f} %")):
+                self.acts.setItem(r, c, QTableWidgetItem(text))
+        fit_height(self.acts)
+        self.acts.setVisible(bool(rows))
+        fav = s.favourite_activity()
+        self.fav_line.setText(f"Любимое занятие (дольше всего): {names.get(fav, fav)}." if fav else
+                              "Пока он больше гуляет - любимое занятие ещё не определилось.")
+        parts = [f"поймал рыб - {s.fish}", f"нарисовал - {s.drawings}", f"вершин - {s.summits}, флагов - {s.flags}",
+                 f"нырков - {s.dives}, рыб под водой видел - {s.fish_seen}", f"птиц прилетало - {s.birds_seen}",
+                 f"собака приносила мяч - {s.dog_brought}"]
+        if life is not None:
+            j = life.toy_journals.get("blocks") or toy_base.journal(life.body_seed, "blocks")
+            best = max([int(e.get("blocks", 0)) for e in j.entries] or [0])
+            parts.append(f"самая высокая башня - {best} кубиков")
+            sw = life.swim.swimmer
+            parts.append("плавает: " + ("уже пловец" if sw.can_swim() else f"учится ({len(sw.history)} попыток)"))
+            if life.dog is not None:
+                parts.append(f"доверие собаки - {life.dog.trust:.2f}" + (" (ручная)" if life.dog.tamed else ""))
+            parts.append(f"полёт птиц этого мира: {life.sky.flyer.flights} пробных полётов")
+        self.acts_lines.setText("; ".join(parts) + ".")
 
     def apply_theme(self, name):
         self.chart.set_theme(name)
@@ -923,6 +1088,11 @@ class SettingsPage(Page):
         self.guitar_fast = self.combo(GUITAR_FAST_NAMES, s.guitar_fast, "guitar_fast")
         row(9, "Скорость, пока играет", "x2-x8 и гитара вместе: слушать каждую попытку или не сбавлять скорость",
             self.guitar_fast)
+        self.dog = self.combo(DOG_NAMES, s.dog, "dog")
+        row(10, "Собака", "Придёт ли в мир собака: никогда, иногда (около 40 % миров) или часто. В хорошем "
+            "настроении он встречает её чаще", self.dog)
+        self.birds = self.combo(BIRD_NAMES, s.birds, "birds")
+        row(11, "Птицы", "Как часто прилетают стайки; в хорошем настроении - чаще и больше (до 8)", self.birds)
         outer.addWidget(box)
         outer.addWidget(label("Всё сохраняется сразу.", "hint"))
         outer.addStretch(1)
@@ -1073,6 +1243,10 @@ class MainWindow(QMainWindow):
         elif name == "show_thoughts":
             self.observe.view.show_thoughts = value
             self.observe.view.update()
+        elif name == "birds" and self.observe.life is not None:
+            self.observe.life.sky.mode = value         # и в этом мире - сразу
+        elif name == "dog" and self.observe.life is not None:
+            self.observe.life.dog_mode = value
         elif name == "speed":
             self.observe.set_speed(value)
         elif name == "guitar_fast":

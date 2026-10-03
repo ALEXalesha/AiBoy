@@ -13,10 +13,13 @@
 """
 import numpy as np
 
-HUNGER_TIME = 900.0          # с - от сытого до голодного
-THIRST_TIME = 600.0          # с - от напившегося до жажды
+HUNGER_TIME = 1500.0         # с - от сытого до голодного (с 900 и 600 с ниже нужды обрывали
+                             # почти каждый сеанс игры: 14 из 17, медиана 1.7 мин - замер в плане)
+THIRST_TIME = 1200.0         # с - от напившегося до жажды
 SUN = 1.3                    # днём жажда растёт быстрее
-RUN_THIRST = 0.0006          # за метр бега (быстрее 1.5 м/с)
+RUN_THIRST = 0.0006          # за метр бега (быстрее RUN_SPEED)
+RUN_SPEED = 2.2              # м/с - бег; обычный шаг у него около 2 м/с, и с порогом 1.5 жажда от «бега»
+                             # шла всё время - вдвое быстрее (замер: питьё обрывало 8 сеансов игры из 20)
 WALK_TIRE = 0.00022          # за метр пути
 CLIMB_TIRE = 0.0012          # за метр подъёма
 SIT_REST = 1.0 / 240.0       # в секунду сидя
@@ -39,7 +42,7 @@ class Needs:
     def tick(self, dt, walked=0.0, climbed=0.0, speed=0.0, night=False, posture="stand"):
         self.hunger = min(1.0, self.hunger + dt / HUNGER_TIME)
         sun = 1.0 if night else SUN
-        run = walked if speed > 1.5 else 0.0
+        run = walked if speed > RUN_SPEED else 0.0
         self.thirst = min(1.0, self.thirst + sun * dt / THIRST_TIME + RUN_THIRST * run)
         self.tired = min(1.0, self.tired + WALK_TIRE * walked + CLIMB_TIRE * max(0.0, climbed))
         if posture == "sit":

@@ -66,8 +66,10 @@ def random_states(n, rng):
     s[:, IDX["playing"]] = playing
     for k in ("learning_tune", "got_it", "failing"):
         s[:, IDX[k]] = playing & (rng.random(n) < 0.4)
+    # флаги - да или нет и редко, как в игре (новые флаги 2.0 тоже: случайное 0..1 включало их все разом)
     for k in ("stood_up", "asked_put", "agreed", "refused", "offered", "hungry", "thirsty", "tired", "tasty",
-              "not_tasty", "swimming", "rescued"):
+              "not_tasty", "swimming", "rescued", "dog_near", "dog_tame", "dog_brought", "dog_tamed", "dog_fled",
+              "summit", "summit_first", "climb_fell", "diving", "birds"):
         s[:, IDX[k]] = rng.random(n) < 0.05
     return s
 

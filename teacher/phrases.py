@@ -67,6 +67,18 @@ NOT_TASTY = ("фу, невкусно", "больше не буду это ест
 SWIMMING = ("плыву!", "учусь плавать", "вода тёплая", "буль-буль", "плыву, плыву")
 RESCUED = ("фух, на берег", "хватит воды", "чуть не нахлебался", "выбрался")
 NEEDS = HUNGRY + THIRSTY + TIRED + TASTY + NOT_TASTY + SWIMMING + RESCUED
+# собака, гора, маска, птицы (2.0)
+DOG_NEAR = ("собачка!", "привет, пёс", "какая собака", "иди сюда, пёс", "не бойся меня")
+DOG_FRIEND = ("пойдём гулять, пёс", "хорошая собака", "ты мой друг", "идём со мной")
+DOG_TAMED = ("мы теперь друзья!", "ура, он мой друг", "хорошая собака!", "он меня не боится")
+DOG_BROUGHT = ("молодец, принёс!", "хороший пёс!", "держи вкусняшку", "ещё бросить?")
+DOG_FLED = ("не бойся", "убежала...", "я не обижу", "куда ты?")
+SUMMIT = ("я залез!", "ура, вершина!", "как высоко!", "вот это вид!", "я на горе!")
+SUMMIT_FIRST = ("я залез!", "ура, вершина!", "мой флаг!", "я первый тут!", "получилось!")
+CLIMB_FELL = ("ой", "ой-ой", "съехал...", "надо осторожнее", "ой, скользко")
+DIVING = ("рыбка!", "под водой красиво", "ныряю", "вижу дно", "буль, рыбки")
+BIRDS = ("птички!", "смотри, птицы", "чирик", "куда летите?", "птицы!")
+WORLD2 = DOG_NEAR + DOG_FRIEND + DOG_TAMED + DOG_BROUGHT + DOG_FLED + SUMMIT + SUMMIT_FIRST + CLIMB_FELL + DIVING + BIRDS
 
 
 def color_name(h, s, v):
@@ -104,6 +116,20 @@ def entity_phrases(kind, color, side, near):
 def topics(state):
     """[(вес, [фразы])] - что можно сказать в этом состоянии."""
     s = lambda name: float(state[IDX[name]])  # noqa: E731
+    if s("summit_first") > 0.5:
+        return [(6.0, list(SUMMIT_FIRST))]
+    if s("summit") > 0.5:
+        return [(6.0, list(SUMMIT))]
+    if s("climb_fell") > 0.5:
+        return [(6.0, list(CLIMB_FELL))]
+    if s("dog_tamed") > 0.5:
+        return [(6.0, list(DOG_TAMED))]
+    if s("dog_brought") > 0.5:
+        return [(6.0, list(DOG_BROUGHT))]
+    if s("dog_fled") > 0.5:
+        return [(5.0, list(DOG_FLED))]
+    if s("diving") > 0.5:
+        return [(4.0, list(DIVING))]
     if s("rescued") > 0.5:
         return [(6.0, list(RESCUED))]
     if s("swimming") > 0.5:
@@ -131,6 +157,10 @@ def topics(state):
             return [(3.0, list(LEARNING)), (0.5, list(FREE))]
         return [(3.0, list(FREE))]
     out = [(0.7, list(IDLE))]
+    if s("dog_near") > 0.5:
+        out.append((2.5, list(DOG_FRIEND if s("dog_tame") > 0.5 else DOG_NEAR)))
+    if s("birds") > 0.5:
+        out.append((2.0, list(BIRDS)))
     for flag, words, w in (("hungry", HUNGRY, 2.5), ("thirsty", THIRSTY, 2.5), ("tired", TIRED, 2.5)):
         if s(flag) > 0.5:
             out.append((w, list(words)))
@@ -179,7 +209,7 @@ def words(text):
 
 def vocabulary():
     """Все слова, которые учитель может сказать."""
-    texts = list(FALL + FLY + JUMP + CURIOUS + BORED + NIGHT + FLAT + FAST + IDLE + DEEP + UP + MUSIC + NEEDS)
+    texts = list(FALL + FLY + JUMP + CURIOUS + BORED + NIGHT + FLAT + FAST + IDLE + DEEP + UP + MUSIC + NEEDS + WORLD2)
     for kind in KINDS:
         for color in COLORS:
             for side in (1, -1):

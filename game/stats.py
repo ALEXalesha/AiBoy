@@ -6,7 +6,8 @@ import math
 
 from game.storage import is_int, load_json, save_json
 
-COUNTS = ("worlds", "phrases", "jumps", "falls", "attempts", "likes", "dislikes")
+COUNTS = ("worlds", "phrases", "jumps", "falls", "attempts", "likes", "dislikes",
+          "summits", "flags", "fish", "drawings", "dives", "fish_seen", "dog_brought", "birds_seen", "guitar_attempts")
 AMOUNTS = ("lived", "distance", "guitar_time")
 MAX_CURVE = 400
 MAX_WORDS = 300
@@ -29,6 +30,11 @@ class Stats:
         self.best = {}             # мелодия -> лучшая похожесть A
         self.words = {}
         self.curve = []            # [[прожито секунд, средняя награда]]
+        # 2.0: занятия
+        self.summits = self.flags = self.fish = self.drawings = 0
+        self.dives = self.fish_seen = self.dog_brought = self.birds_seen = 0
+        self.guitar_attempts = 0   # «попыток» выше - все занятия; здесь - только гитара
+        self.activity = {}         # занятие -> секунд
 
     def add_world(self):
         self.worlds += 1
@@ -44,6 +50,36 @@ class Stats:
         if len(self.words) > MAX_WORDS:
             keep = sorted(self.words.items(), key=lambda kv: -kv[1])[:MAX_WORDS // 2]
             self.words = dict(keep)
+
+    def add_activity(self, name, seconds):
+        if isinstance(name, str):
+            self.activity[name] = self.activity.get(name, 0.0) + float(seconds)
+
+    def favourite_activity(self):
+        """Чем он занимался дольше всего (кроме «гулять» и нужд)."""
+        play = {k: v for k, v in self.activity.items() if k not in ("explore", "eat", "drink", "rest")}
+        return max(play, key=play.get) if play else None
+
+    def add_life_event(self, kind, data):
+        """События жизни 2.0 - в счётчики."""
+        if kind == "summit":
+            self.summits += 1
+        elif kind == "flag":
+            self.flags += 1
+        elif kind == "toy_attempt" and data:
+            name, entry = data[0], (data[1] if len(data) > 1 and isinstance(data[1], dict) else {})
+            if name == "rod" and entry.get("why") == "поймал":
+                self.fish += 1
+            elif name == "marker":
+                self.drawings += 1
+        elif kind == "dive":
+            self.dives += 1
+            if len(data) > 1 and data[1]:
+                self.fish_seen += 1
+        elif kind == "dog_brought":
+            self.dog_brought += 1
+        elif kind == "birds_came" and data:
+            self.birds_seen += int(data[0])
 
     def add_event(self, name):
         if name == "jump":
@@ -62,6 +98,7 @@ class Stats:
 
     def add_attempt(self, entry, best=None):
         self.attempts += 1
+        self.guitar_attempts += 1
         tune = entry.get("tune")
         if tune is not None and entry.get("A") is not None:
             self.best[tune] = max(self.best.get(tune, 0.0), float(entry["A"]))
@@ -82,6 +119,7 @@ class Stats:
         d["words"] = dict(self.words)
         d["curve"] = [list(p) for p in self.curve]
         d["best"] = dict(self.best)
+        d["activity"] = {k: round(v, 1) for k, v in self.activity.items()}
         return d
 
     @classmethod
@@ -101,6 +139,8 @@ class Stats:
         if isinstance(raw.get("best"), dict):
             s.best = {k: float(v) for k, v in raw["best"].items()
                       if isinstance(k, str) and _num(v) and v <= 1.0}
+        if isinstance(raw.get("activity"), dict):
+            s.activity = {k: float(v) for k, v in raw["activity"].items() if isinstance(k, str) and _num(v)}
         if isinstance(raw.get("curve"), list):
             s.curve = [[float(p[0]), float(p[1])] for p in raw["curve"]
                        if isinstance(p, list) and len(p) == 2 and _num(p[0])

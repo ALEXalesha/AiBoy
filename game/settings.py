@@ -8,7 +8,7 @@ THEMES = ("dark", "light")
 FREQS = ("rare", "normal", "often")
 FREQ_NAMES = {"rare": "Редко", "normal": "Обычно", "often": "Часто"}
 SPEEDS = (1, 2, 4, 8, 16)
-SIZES = ("small", "medium", "large")
+SIZES = ("small", "medium", "large", "huge", "giant")
 SIZE_NAMES = {"small": "Маленький (80 м)", "medium": "Средний (160 м)", "large": "Большой (320 м)",
               "huge": "Огромный (640 м)", "giant": "Бескрайний (1280 м)"}
 WORLD_WIDTH = {"small": 80.0, "medium": 160.0, "large": 320.0, "huge": 640.0, "giant": 1280.0}

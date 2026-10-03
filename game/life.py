@@ -136,7 +136,8 @@ class Life:
         self.choice = choice if choice is not None else Choice(guitar_freq, np.random.default_rng(self.rng.integers(2 ** 31)))
         for t in toy_registry.TOYS.values():
             if t.name != "guitar":
-                self.choice.add(t.name, t.half)
+                from acts.choice import NEW_TOY
+                self.choice.add(t.name, t.half, liking=NEW_TOY)
         self.toy_heads = toy_heads or {}       # игрушка -> чему она его научила (головы, навыки)
         self.toy = None                        # идущая игра с игрушкой (toys/base.Session)
         self.seek_toy = None                   # за какой игрушкой идёт (к сундуку или где лежит)
@@ -294,6 +295,8 @@ class Life:
         h = self.human
         if self.climb.mode is not None and self.climb.tick(DT, events):
             for e in events:
+                if e[0] == "climb_attempt":
+                    self.journal_add("climb", dict(e[1], success=e[1]["share"]))
                 if e[0] == "celebrated":
                     self.climb_flags = {}
                     if self.choice.current == "climb":
@@ -483,8 +486,26 @@ class Life:
         elif k is None:
             self.climb.on_top = None
 
+    def seek_max(self, name):
+        """Сколько идти за игрушкой, прежде чем решить заново: по дороге до неё (0.5 м/с с запасом).
+        Было 90 с на всё - и до сундука в 80 м он не доходил: «сеанс» игры кончался, не начавшись
+        (замер: медиана сеансов 1.5 мин, ровно 90 с)."""
+        where = self.inv.position(name) if name else None
+        d = self.inv.dist(self.human.px, where) if where is not None else 0.0
+        return SEEK_MAX + d / 0.5
+
+    def journal_add(self, name, entry):
+        """Запись в журнал занятия (не игрушки): гора и т.п. - для «Попыток»."""
+        from toys import base as toy_base
+        if name not in self.toy_journals:
+            self.toy_journals[name] = toy_base.journal(self.body_seed, name)
+        return self.toy_journals[name].add(entry)
+
     def on_summit(self, k, first):
         """Радость на вершине: настроение вверх, фраза, вершина - в память мест."""
+        if self.climb.route in (None, "easy") or self.climb.go is not None:
+            self.journal_add("climb", {"route": "easy", "height": round(self.world.mountains[k].height, 1),
+                                       "share": 1.0, "falls": 0, "top": True, "success": 1.0, "first": bool(first)})
         c = self.choice
         c.mood = min(1.0, c.mood + 0.4)
         c.after_attempt("climb", pleasure(1.0, self.climb.climber.history[:-1]))
@@ -700,6 +721,8 @@ class Life:
         self.dog_flags = {}
         if self.toy is not None and self.toy.name == "dog":
             self.toy.stop()
+        if self.choice.current == "dog":
+            self.choice.switch("explore")
         self._pending.append(("dog_left",))
 
     def _dog_tick(self):
@@ -732,6 +755,9 @@ class Life:
             if self.toy is not None and hasattr(self.toy, "dog_event"):
                 self.toy.dog_event(kind)
             self._pending.append(e)
+        if dog.flags.get("dog_fled"):
+            self.dog_flags = {"dog_fled": 1.0}      # убежала от него - он скажет «не бойся»
+            dog.flags = {}
         if dog.tamed and not was_tamed:
             self.dog_flags = {"dog_tamed": 1.0}
             self._pending.append(("sound", "bark", 0.8, size))
@@ -937,7 +963,7 @@ class Life:
                 else:
                     self.start_toy(name, events)
                 return
-            if self.time - self.seek_since > SEEK_MAX:
+            if self.time - self.seek_since > self.seek_max(self.seek_toy):
                 self.seek_toy = self.seek_for = None
                 self.walk.goal = None
                 self.choice.switch("explore")
@@ -951,7 +977,7 @@ class Life:
                     self.sit_down()
                     events.append(("sit",))
                 return
-            if self.time - self.seeking > SEEK_MAX:
+            if self.time - self.seeking > self.seek_max("guitar"):
                 self.seeking = None                 # не дошёл - решит заново
                 self.walk.goal = None
         if self.climb.go is not None and self.seek_toy is None:
@@ -977,6 +1003,9 @@ class Life:
                         self.put_held()
                     self.seek_toy, self.seek_for, self.seek_since = "mask", "dive", self.time
                     self.walk.goal = self.inv.position("mask")
+                return
+            if pick == "dog" and self.dog is None:
+                self.choice.switch("explore")        # собака ушла, а выбор держал «собаку» текущим
                 return
             if pick == "dog":
                 ball = self.inv.where.get("ball")

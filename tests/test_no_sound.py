@@ -39,7 +39,9 @@ def test_the_game_without_a_screen_does_not_open_audio(tmp_path):
             "w.show_page('observe'); w.observe.advance(120); w.close()\n"
             "print(any(m.startswith('PySide6.QtMultimedia') for m in sys.modules))\n") % (ROOT, tmp_path)
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
-    assert out.stdout.strip().splitlines()[-1] == "False", out.stderr[-500:]
+    lines = out.stdout.strip().splitlines()
+    # пустой вывод - процесс упал: показать код выхода и хвост stderr (в полном прогоне так было раз)
+    assert lines and lines[-1] == "False", (out.returncode, out.stderr[-800:])
 
 
 def test_the_build_takes_the_audio_sink_but_not_ffmpeg():

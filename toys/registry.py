@@ -21,6 +21,7 @@ class Toy:
     carry: str = "hands"
     half: float = 5.0
     needs: str = ""
+    tool: bool = False          # снаряжение (верёвка, ледоруб, маска): своего занятия нет, берёт для горы и воды
 
 
 TOYS = {}
@@ -48,6 +49,9 @@ register(Toy("boomerang", "Бумеранг", carry="hands", half=5.0))
 register(Toy("rod", "Удочка", carry="back", half=6.0, needs="water"))
 register(Toy("bicycle", "Велосипед", carry="hands", half=5.5))
 register(Toy("marker", "Фломастер", carry="hands", half=4.5))
+register(Toy("rope", "Верёвка с крюком", carry="back", tool=True))
+register(Toy("axe", "Ледоруб", carry="hands", tool=True))
+register(Toy("mask", "Маска для ныряния", carry="hands", tool=True))
 
 
 # Игрушки, с которыми играют на месте (toys/inplace.py): имя -> (модуль, класс голов, класс попытки)

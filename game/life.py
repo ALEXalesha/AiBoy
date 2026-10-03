@@ -58,6 +58,8 @@ ASK_T = 0.1                # «положи гитару» - температу�
 OFFER_BONUS = 0.15         # прибавка к тяге игрушки, которую ему предложили
 OFFER_NEAR = 0.6           # м - предложенную кладут рядом, до неё дотянуться
 SEEK_MAX = 90.0            # с - столько идёт к положенной гитаре, потом решает заново
+SLIDE_FALL = 5.0           # м/с - с обрыва съезжает не быстрее (падение - 8.5)
+EDGE = 1.5                 # м за 0.6 м вперёд - обрыв
 
 
 class LifeDogCtx(DogCtx):
@@ -82,7 +84,7 @@ class Life:
     def __init__(self, models, world_seed, body_seed, width, brain, frequency="normal", seed=None,
                  guitarist=None, has_guitar=False, guitar_freq="sometimes", choice=None, navigator=None,
                  needs=None, backpack=None, food_prefs=None, swimmer=None, toy_heads=None, chest=None,
-                 dog_mode="never", dog_saved=None):
+                 dog_mode="never", dog_saved=None, climber=None, summits=None):
         self.models = models
         self.world_seed, self.body_seed = int(world_seed), int(body_seed)
         self.world = generate(models.world_genome, world_seed, width)
@@ -165,7 +167,21 @@ class Life:
         self.swim = Swim(self, swimmer if swimmer is not None else Swimmer(seed=int(body_seed) % (2 ** 31)))
         self.human.can_swim = self.swim.swimmer.can_swim()
         self.swim_flags = {}
-        self.seek_for = None                   # за мячом идёт, чтобы играть с собакой
+        self.seek_for = None                   # за мячом идёт, чтобы играть с собакой (или за снаряжением - на гору)
+        # горы (acts/climb.py): лезть учится с нуля; флаги и покорённые - мира, страх - его
+        from acts.climb import Climb
+        from skills.climb import AxeSkill, Climber, RopeSkill
+        bs = int(body_seed) % (2 ** 31)
+        rope = self.toy_heads.setdefault("rope", RopeSkill(seed=bs))
+        axe = self.toy_heads.setdefault("axe", AxeSkill(seed=bs))
+        self.climb = Climb(self, climber if climber is not None else Climber(seed=bs), rope, axe)
+        if summits:
+            self.climb.flags = [float(f) for f in summits.get("flags", [])]
+            self.climb.conquered = {int(k) for k in summits.get("conquered", []) if isinstance(k, int)}
+        self.climb_flags = {}
+        self.choice.add("climb", 5.0)
+        self.choice.add("dive", 5.0)            # нырять в маске (acts/dive.py)
+        self._air_top = None
         self._pending = []                     # события собаки - в ответ tick()
         # собака (animals/dog): есть ли в мире - по настройке и настроению; ручная из сохранения -
         # сразу рядом. dog_saved - (состояние, сеть движения, сеть «принести») собаки этого мира
@@ -270,6 +286,15 @@ class Life:
             return self._guitar_tick()
         events = []
         h = self.human
+        if self.climb.mode is not None and self.climb.tick(DT, events):
+            for e in events:
+                if e[0] == "celebrated":
+                    self.climb_flags = {}
+                    if self.choice.current == "climb":
+                        self.choice.switch("explore")
+                    self.decide_clock = 0.0
+            self._clock_tick()
+            return events
         if self.swim.mode is not None and self.swim.tick(DT, events):
             return self._water_tick(events)
         if (self.swim.mode is None and h.can_swim and h.grounded
@@ -293,6 +318,9 @@ class Life:
         self.walk.learn = self.learn if self.nav_learn is None else self.nav_learn
         want = self.walk.tick(self.time, DT, h.px, h.facing, interest,
                               can_decide=h.grounded and h.fallen <= 0 and self.decision is not None)
+        if self.walk.goal is None and h.grounded and want == h.facing and self._edge_ahead():
+            self.walk.rest(-h.facing)            # край стены горы - разворачивается
+            want = -h.facing
         self.intent += ((0.0 if self.walk.looking else want) - self.intent) * INTENT_K
         left = self.walk.look_left
         # осматривается: сначала оглядывается назад, потом снова вперёд (голова, не тело)
@@ -338,6 +366,8 @@ class Life:
         return events
 
     def _clock_tick(self):
+        self._fall_guard()
+        self._summit_check()
         self.choice.tick(DT)
         self._phys_tick()
         if self.fish.fish:
@@ -353,6 +383,159 @@ class Life:
             self._log_clock -= LOG_EVERY
             self.curiosity_log.append(float(self.brain.last_err))
             del self.curiosity_log[:-240]
+
+    # --- горы ---
+    def _fall_guard(self):
+        """С обрыва (край стены) он не падает камнем: съезжает (скорость не больше SLIDE_FALL),
+        внизу - «ой» и немного устал. Без вреда, как в воде. Спуск по стене - касается её и снова
+        летит: это один спуск, «ой» - когда секунду стоит внизу (замер: «ой» каждые 2 с)."""
+        h = self.human
+        if self.climb.mode is not None or not getattr(self.world, "mountains", None):
+            # только в мире с горами: в обычных падение остаётся падением (мозг ходьбы учится на нём)
+            self._air_top, self._ground_t = None, 0.0
+            return
+        if not h.grounded:
+            self._air_top = h.py if self._air_top is None else max(self._air_top, h.py)
+            self._ground_t = 0.0
+            if h.vy < -SLIDE_FALL:
+                h.vy = -SLIDE_FALL
+            return
+        if self._air_top is None:
+            return
+        self._ground_t = getattr(self, "_ground_t", 0.0) + DT
+        if self._ground_t < 1.0:
+            return
+        drop = self._air_top - h.py
+        self._air_top = None
+        if drop > 5.0:                       # обычные уступы холмов - до 4 м, это не падение
+            self.needs.tired = min(1.0, self.needs.tired + min(0.1, 0.01 * drop))
+            self.climb_flags = {"climb_fell": 1.0}
+            self._pending.append(("slid", round(drop, 1)))
+            self._pending.append(("phrase", self.say()))
+            self.climb_flags = {}
+
+    def _edge_ahead(self):
+        """Впереди край стены горы (обрыв больше EDGE за шаг) - гуляя просто так, он туда не идёт.
+        Только стены гор: крутые уступы обычных холмов - его дорога (замер: разворачивался у них,
+        и в новом мире шёл вперёд 70 % первого круга вместо 75 %)."""
+        peaks = getattr(self.world, "mountains", None)
+        if not peaks:
+            return False
+        from world import mountains as mt
+        h = self.human
+        ahead = h.px + 0.6 * h.facing
+        if mt.on_face(peaks, ahead, self.world.width) is None:
+            return False
+        return self.world.height_at(h.px) - self.world.height_at(ahead) > EDGE
+
+    def _summit_check(self):
+        """Пришёл на вершину (любым путём) - флаг в первый раз и радость; один раз за приход."""
+        peaks = getattr(self.world, "mountains", None)
+        if not peaks or self.climb.mode is not None:
+            return
+        from world import mountains as mt
+        m = mt.summit_at(peaks, self.human.px, self.world.width)
+        k = peaks.index(m) if m is not None else None
+        if k is not None and k != self.climb.on_top and self.human.grounded:
+            self.climb.on_top = k
+            if k not in self.climb.conquered or self.choice.current == "climb":
+                self.climb.summit(k, self._pending)    # просто прошёл через покорённую - не радуется снова
+        elif k is None:
+            self.climb.on_top = None
+
+    def on_summit(self, k, first):
+        """Радость на вершине: настроение вверх, фраза, вершина - в память мест."""
+        c = self.choice
+        c.mood = min(1.0, c.mood + 0.4)
+        c.after_attempt("climb", pleasure(1.0, self.climb.climber.history[:-1]))
+        self.walk.goal = None
+        self.climb.go = None
+        self.climb.on_top = k
+        m = self.world.mountains[k]
+        self.walk.places.marks[f"вершина {k + 1}"] = m.summit
+        self.climb_flags = {"summit": 1.0, "summit_first": 1.0 if first else 0.0}
+        self._pending.append(("phrase", self.say()))
+
+    def start_dive(self, events):
+        """В маске - к воде и нырять. Маска только для этого: просто поплавать - без неё."""
+        from acts.dive import MaskHeads
+        heads = self.toy_heads.setdefault("mask", MaskHeads(seed=int(self.body_seed) % (2 ** 31)))
+        if not self.swim.start(self.human.px):
+            self.choice.switch("explore")
+            return
+        self.swim.put_on_mask(heads)
+        events.append(("mask_on",))
+
+    def after_dive(self, seen, depth, hold):
+        """Нырок кончился: в журнал, удовольствие - в выбор; хватит - к берегу."""
+        from toys import base as toy_base
+        if "mask" not in self.toy_journals:
+            self.toy_journals["mask"] = toy_base.journal(self.body_seed, "mask")
+        heads = self.swim.mask_heads
+        p = pleasure(1.0 if seen else 0.2, heads.history[:-1])
+        self.toy_journals["mask"].add({"kind": "dive", "depth": round(depth, 2), "hold": round(hold, 1),
+                                       "seen": bool(seen), "success": 1.0 if seen else 0.0, "pleasure": round(p, 4)})
+        self.choice.after_attempt("dive", p)
+        if self.choice.choose(self.available(), self.needs.urgency()) != "dive":
+            self.swim.take_off_mask()
+            self.swim.mode = "cross"                 # хватит - к берегу
+
+    def after_climb(self, share):
+        """Попытка на стене кончилась без вершины."""
+        self.choice.after_attempt("climb", pleasure(share, self.climb.climber.history[:-1]))
+        self.climb.go = None
+        self.walk.goal = None
+        if self.choice.current == "climb":
+            self.choice.switch("explore")
+        self.decide_clock = 0.0
+
+    def _climb_go(self, events):
+        """Идёт к горе (лёгким путём - до вершины, на стену - к её подножию); дошёл - лезет."""
+        k, route = self.climb.go
+        m = self.world.mountains[k]
+        if route != "easy" and self.inv.dist(self.human.px, m.face_foot()) < 1.2 and self.human.grounded:
+            self.walk.goal = None
+            self.climb.go = None
+            self.climb.start_face(k, route)
+            events.append(("climb_start", route))
+            return True
+        if self.time - self.seek_since > self.climb.go_max:
+            self.climb.go = None
+            self.walk.goal = None
+            self.choice.switch("explore")
+        return False
+
+    def start_climb(self, events):
+        """Выбрал «гора»: путь - softmax (acts/climb.Climb.routes); снаряжение - из сундука."""
+        tools = [t for t in ("rope", "axe") if t in self.inv.where and self.inv.where[t] not in ("flying", "dog")]
+        probs, k = self.climb.routes(self.human.px, tools, self.needs.tired)
+        if k is None:
+            self.choice.switch("explore")
+            return
+        names = list(probs)
+        route = names[int(self.rng.choice(len(names), p=[probs[n] for n in names]))]
+        m = self.world.mountains[k]
+        self.climb.go = (k, route)
+        self.seek_since = self.time
+        d_easy, d_face = self.climb.approach(k, self.human.px)
+        # дорога - около 0.6 м/с, вверх по лёгкому пути - ещё его длина
+        self.climb.go_max = 120.0 + ((d_easy + m.easy_len) if route == "easy" else d_face) / 0.4
+        events.append(("climb_route", route))
+        if route == "easy":
+            self.walk.goal = m.summit
+            self.walk.goal_way = m.steep            # лёгкий путь - с той стороны, что без стены
+            self.walk.goal_fixed = True
+            return
+        if route in ("rope", "axe") and self.inv.where.get(route) != "carried":
+            if self.inv.carried is not None:
+                events.append(("put_toy", self.inv.carried))
+                self.put_held()
+            self.seek_toy, self.seek_for = route, "climb"
+            self.walk.goal = self.inv.position(route)
+            return
+        self.walk.goal = m.face_foot()
+        self.walk.goal_way = -m.steep               # к подножию стены - со стороны долины
+        self.walk.goal_fixed = True
 
     # --- нужды ---
     def _needs_tick(self):
@@ -578,6 +761,10 @@ class Life:
                 out.append(("ball", hx, hy, r, c1))
             elif isinstance(where, float):
                 out.append(("ball", where, self.world.height_at(where) + r, r, c1))
+        if self.swim.mask and self.swim.in_water:
+            pts = self.human.points()
+            hx, hy = pts["head"]
+            out.append(("mask", hx + 0.06 * self.human.facing, hy, 0.09, (0.15, 0.35, 0.75)))
         for d in self.drawings[-12:]:
             out.append(("drawing", d["x"], d["y"], (d["points"], d["pens"], d["facing"]), (0.15, 0.2, 0.7)))
         if self.toy is not None and hasattr(self.toy, "visuals"):
@@ -640,6 +827,8 @@ class Life:
         self.choice.after_attempt("swim", pleasure(min(1.0, max(0.0, r) / (2 * SWIMMER)),
                                                    self.swim.swimmer.history[:-1]))
         self.human.can_swim = self.swim.swimmer.can_swim()
+        if self.swim.mask:
+            return                                   # ныряет в маске - когда хватит, решает нырок (after_dive)
         if self.choice.choose(self.available(), self.needs.urgency()) != "swim":
             self.swim.mode = "cross"                 # хватит - к берегу
 
@@ -649,6 +838,9 @@ class Life:
              "tired": 1.0 if n.tired > 0.6 else 0.0}
         f.update(self.daily.flags)
         f.update(self.swim_flags)
+        f.update(self.climb_flags)
+        if self.swim.mask:
+            f["diving"] = 1.0
         if self.dog is not None:
             f["dog_near"] = 1.0 if abs(self.dog.dist(self.human.px)) < 8.0 else 0.0
             f["dog_tame"] = 1.0 if self.dog.tamed else 0.0
@@ -663,8 +855,12 @@ class Life:
         acts += self.daily.available(self.human.px, self.time)
         if self.swim.available(self.human.px):
             acts.append("swim")
+            if "mask" in self.inv.where and self.inv.where["mask"] not in ("flying", "dog"):
+                acts.append("dive")              # долго в воде, смотреть рыб - с маской
+        if self.climb.available(self.human.px) and self.climb.mode is None:
+            acts.append("climb")                 # гора рядом - можно на неё
         for t in toy_registry.TOYS.values():
-            if t.name == "guitar" or t.name not in self.inv.where:
+            if t.name == "guitar" or t.name not in self.inv.where or t.tool:
                 continue
             if t.needs == "water" and not self.water.ponds:
                 continue                         # удочка - только где есть вода
@@ -687,6 +883,16 @@ class Life:
                 if self.seek_for == "dog":
                     self.seek_for = None
                     self.start_toy("dog", events)      # взял мяч - играть с собакой
+                elif self.seek_for == "dive":
+                    self.seek_for = None
+                    self.start_dive(events)            # взял маску - к воде
+                elif self.seek_for == "climb" and self.climb.go is not None:
+                    self.seek_for = None
+                    m = self.world.mountains[self.climb.go[0]]
+                    self.walk.goal = m.face_foot()     # взял снаряжение - к стене
+                    self.walk.goal_way = -m.steep
+                    self.walk.goal_fixed = True
+                    self.seek_since = self.time
                 else:
                     self.start_toy(name, events)
                 return
@@ -707,11 +913,30 @@ class Life:
             if self.time - self.seeking > SEEK_MAX:
                 self.seeking = None                 # не дошёл - решит заново
                 self.walk.goal = None
+        if self.climb.go is not None and self.seek_toy is None:
+            self._climb_go(events)
+            return
         if (self.seeking is None and self.daily.task is None and self.swim.mode is None and self.toy is None
                 and self.decide_clock >= DECIDE_EVERY
                 and self.human.grounded and self.human.fallen <= 0 and not self.walk.looking):
             self.decide_clock = 0.0
+            if "climb" in self.choice.acts:
+                from acts.choice import BIAS
+                self.choice.acts["climb"].bias = BIAS[self.choice.freq] + self.climb.bias(self.human.px)
             pick = self.choice.choose(self.available(), self.needs.urgency())
+            if pick == "climb":
+                self.start_climb(events)
+                return
+            if pick == "dive":
+                if self.inv.where.get("mask") == "carried":
+                    self.start_dive(events)
+                else:
+                    if self.inv.carried is not None:
+                        events.append(("put_toy", self.inv.carried))
+                        self.put_held()
+                    self.seek_toy, self.seek_for, self.seek_since = "mask", "dive", self.time
+                    self.walk.goal = self.inv.position("mask")
+                return
             if pick == "dog":
                 ball = self.inv.where.get("ball")
                 if self.dog.tamed and ball is not None and ball not in ("carried", "flying", "dog"):

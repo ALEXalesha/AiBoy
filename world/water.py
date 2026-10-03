@@ -139,6 +139,11 @@ def ponds(world, genome=None):
         if frac < 0.2:
             continue
         level = h[i] + frac * (spill - h[i])
+        if getattr(world, "mountains", None):
+            from world.mountains import MAX_POND
+            level = min(level, h[i] + MAX_POND)  # котловина у горы - пруд, не озеро в десятки метров
+        if getattr(world, "shallow_water", False):
+            level = min(level, h[i] + WADE * 0.9)  # глубокая заперла бы долину у стены - вброд
         if level - h[i] >= MIN_DEPTH:
             cand.append([i, level, spill])
     # защита: глубоких (не вброд) - не больше одного; остальные мельче, до брода

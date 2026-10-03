@@ -13,6 +13,7 @@
 """
 import math
 
+from acts import dive
 from body.swim import Stroke, SwimBody
 from skills.swim import ATTEMPT
 
@@ -40,6 +41,10 @@ class Swim:
         self.start_x = 0.0
         self.rescue_from = None
         self.attempts = 0
+        self.mask = False            # в маске (acts/dive.py): под водой - пока есть воздух
+        self.mask_heads = None
+        self.air = 0.0
+        self.dive = None             # [фаза, глубина нырка, держаться с, сейчас глубина, запись, увидел, с в фазе]
 
     @property
     def in_water(self):
@@ -136,13 +141,17 @@ class Swim:
                 return False                     # уже на берегу
         else:
             head = b.step(self.stroke, dt)
+            if self.mask and self.mode == "swim":
+                head = b.head = self._dive_step(dt, events)     # в маске голова - там, куда нырнул
             self.steps += 1
             self.above += head > 0
             self.under = self.under + dt if head <= 0 else 0.0
             self.t += dt
             life.needs.tired = min(1.0, life.needs.tired + TIRE * dt)
             life.needs.thirst = min(1.0, life.needs.thirst + THIRST * dt)
-            if self.under > UNDER or life.needs.tired > TIRED_OUT:
+            # безопасность: без маски - UNDER с с головой под водой; в маске - пока есть воздух
+            out_of_air = self.air <= 0.0 if self.mask else self.under > UNDER
+            if out_of_air or life.needs.tired > TIRED_OUT:
                 self.start_rescue(events)
             elif self.t >= ATTEMPT and self.mode == "swim":
                 self.end_attempt(events)
@@ -170,6 +179,63 @@ class Swim:
         self.life.after_swim(r)
         if self.mode == "swim" and not rescue:
             self.new_attempt()
+
+    # --- маска ---
+    def put_on_mask(self, heads):
+        self.mask, self.mask_heads, self.air, self.dive = True, heads, dive.AIR, None
+
+    def take_off_mask(self):
+        self.mask, self.dive = False, None
+
+    def _fish_depth(self, x):
+        life = self.life
+        best = None
+        level = self.body.level
+        for f in getattr(life.fish, "fish", []):
+            fx, fy = life.fish.position(f)
+            d = abs(((fx - x + life.world.width / 2) % life.world.width) - life.world.width / 2)
+            if self.pond is not None and life.water.pond_at(fx) is self.pond and (best is None or d < best[0]):
+                best = (d, level - fy)
+        return best[1] if best else (self.pond.depth * 0.6 if self.pond else 1.0)
+
+    def _dive_step(self, dt, events):
+        """Нырки в маске. Возвращает «голова над водой» (минус - на глубине)."""
+        b = self.body
+        life = self.life
+        depth_here = max(0.3, life.water.depth_at(b.x) - 0.2)
+        if self.dive is None:
+            self.dive = ["surface", 0.0, 0.0, 0.0, None, False, 0.0]
+        d = self.dive
+        d[6] += dt
+        if d[0] == "surface":
+            self.air = min(dive.AIR, self.air + dive.REFILL * dt)
+            if d[6] >= dive.BREATHE:
+                depth, hold, rec = self.mask_heads.plan(depth_here + 0.2, self._fish_depth(b.x), self.air, life.needs.tired)
+                d[:] = ["down", min(depth, depth_here), hold, 0.0, rec, False, 0.0]
+                events.append(("sound", "bubbles", 0.5, 0.05))
+            return max(b.head, 0.02)
+        self.air -= dt
+        if d[0] == "down":
+            d[3] = min(d[1], d[3] + dive.DIVE_V * dt)
+            if d[3] >= d[1] - 1e-6:
+                d[0], d[6] = "hold", 0.0
+        elif d[0] == "hold":
+            for f in getattr(life.fish, "fish", []):
+                fx, fy = life.fish.position(f)
+                if abs(fx - b.x) < 1.0 and abs((b.level - fy) - d[3]) <= dive.SEE_FISH:
+                    d[5] = True
+            if d[6] >= d[2] or self.air <= 2.0 * d[3] / dive.DIVE_V:
+                d[0] = "up"
+        else:
+            d[3] = max(0.0, d[3] - dive.DIVE_V * dt)
+            if d[3] <= 0.0:
+                ran_out = self.air <= 0.0
+                r = self.mask_heads.finish(d[4], d[5], ran_out, learn=life.learn)
+                events.append(("dive", round(d[1], 2), bool(d[5]), round(r, 2)))
+                self.dive = None
+                life.after_dive(d[5], d[1], d[2])
+                return 0.02
+        return -d[3] - 0.05
 
     def start_rescue(self, events):
         if self.mode == "swim":
@@ -225,6 +291,7 @@ class Swim:
         rescued = self.mode == "rescue"
         self.body = None
         self.mode = None
+        self.take_off_mask()                      # на берегу маску снимает
         h.tilt = 0.0
         h.px = b.x % self.life.world.width
         h.facing = b.facing

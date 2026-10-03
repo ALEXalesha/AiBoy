@@ -50,12 +50,14 @@ def test_big_worlds_do_not_visibly_repeat_and_have_no_traps(m, width):
     shape = []
     for seed in range(40, 50):
         w = generate(m.world_genome, seed, width)
-        assert macro.repeat_score(w.heights, w.dx) < WHOLE, seed
+        # повтор - по рельефу без гор (одна гора 60-100 м - не повтор, а автокорреляцию её
+        # склон поднимает до 0.9 на любом сдвиге; горы - свои законы, test_mountains.py)
+        assert macro.repeat_score(w.relief, w.dx) < WHOLE, seed
         shape.append(macro.shape_repeat_score(w.hills, w.dx))
         assert shape[-1] < SHAPE, seed
         assert not reach.traps(w)
         # хребты и котловины: перепад высот больше, чем даёт сеть холмов одна (до 12 м)
-        assert np.ptp(w.heights) > 8.0, seed
+        assert np.ptp(w.relief) > 8.0, seed
     assert np.median(shape) < 0.4                      # узор холмов не повторяется и в среднем
 
 

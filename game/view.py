@@ -663,6 +663,89 @@ def draw_fish(p, f, world, school):
         p.restore()
 
 
+def _flag_cloth(p, base, ppm, t, wind, color):
+    """Флаг на ветру: древко 2 м и полотнище, волна бежит по нему; ветер - сила и сторона."""
+    pole_top = QPointF(base.x(), base.y() - 2.0 * ppm)
+    p.setPen(QPen(QColor(90, 70, 50), max(1.5, 0.05 * ppm)))
+    p.drawLine(base, pole_top)
+    side = 1.0 if wind >= 0 else -1.0
+    strength = min(1.0, 0.3 + abs(wind) / 3.0)
+    w, h = 0.9 * ppm * strength + 0.3 * ppm, 0.5 * ppm
+    top, bottom = [], []
+    for k in range(9):
+        u = k / 8
+        wave = math.sin(t * 7.0 - u * 6.0) * 0.12 * ppm * u * (0.5 + strength)
+        x = pole_top.x() + side * u * w
+        top.append(QPointF(x, pole_top.y() + wave))
+        bottom.append(QPointF(x, pole_top.y() + h + wave - u * (1.0 - strength) * 0.3 * ppm))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(color)
+    p.drawPolygon(QPolygonF(top + bottom[::-1]))
+
+
+def draw_far_mountains(p, f, world, peaks, flags, t, wind):
+    """Горы издали: силуэт за ближним рельефом, тем меньше, чем дальше; снег на макушке; флаг на
+    покорённой - видно издалека."""
+    if not peaks:
+        return
+    pal = world.palette
+    horizon = f.Y(f.cam_y) + 0.4 * f.ppm
+    for m in peaks:
+        d = (m.summit - f.cam_x + world.width / 2) % world.width - world.width / 2
+        if abs(d) < m.face_len + 10:
+            continue                              # он на самой горе - её видно рельефом
+        # в какой стороне и как далеко: дальняя - у края кадра и ниже (замер кадром: с прежним
+        # сдвигом гора в 570 м уезжала за кадр на 1950 точек)
+        scale = 1.0 / (1.0 + abs(d) / 400.0)
+        cx = f.rect.left() + f.w / 2 + math.copysign(f.w * 0.48 * (1.0 - math.exp(-abs(d) / 250.0)), d)
+        hpx = f.h * 0.6 * (m.height / 100.0) * scale
+        easy_w = hpx / 0.22 * 0.35
+        face_w = hpx / 3.3 * 1.4
+        left_w, right_w = (easy_w, face_w) if m.steep > 0 else (face_w, easy_w)
+        if cx + right_w < f.rect.left() or cx - left_w > f.rect.right():
+            continue
+        top = QPointF(cx, horizon - hpx)
+        poly = QPolygonF([QPointF(cx - left_w, horizon), QPointF(cx - 0.02 * hpx, top.y()),
+                          QPointF(cx + 0.02 * hpx, top.y()), QPointF(cx + right_w, horizon)])
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(qc(blend(pal["far"], pal["sky_bottom"], 0.25)))
+        p.drawPolygon(poly)
+        if m.snow > 0.35:
+            k = 0.18
+            snow = QPolygonF([QPointF(cx - left_w * k, top.y() + hpx * k), QPointF(cx - 0.02 * hpx, top.y()),
+                              QPointF(cx + 0.02 * hpx, top.y()), QPointF(cx + right_w * k, top.y() + hpx * k)])
+            p.setBrush(QColor(245, 248, 252, 230))
+            p.drawPolygon(snow)
+        if any(abs((fx - m.summit + world.width / 2) % world.width - world.width / 2) < 1.0 for fx in flags or ()):
+            _flag_cloth(p, top, max(4.0, f.ppm * scale * 0.6), t, wind, QColor(220, 60, 50))
+
+
+def draw_summit_flags(p, f, world, peaks, flags, t, wind):
+    """Флаги на вершинах вблизи."""
+    for fx in flags or ():
+        x = unwrap(fx, f.cam_x, world.width)
+        if abs(x - f.cam_x) > f.half + 2:
+            continue
+        _flag_cloth(p, QPointF(f.X(x), f.Y(world.height_at(x))), f.ppm, t, wind, QColor(220, 60, 50))
+
+
+def draw_snow(p, f, world, peaks):
+    """Снег у макушки снежной горы: белая кромка по рельефу выше (вершина - 10 м)."""
+    for m in peaks or ():
+        if m.snow <= 0.35:
+            continue
+        xs = visible_xs(f, world)
+        hs = world.heights_at(xs)
+        line = m.top - 10.0
+        pts = [QPointF(f.X(x), f.Y(y)) for x, y in zip(xs, hs) if y > line]
+        if len(pts) < 2:
+            continue
+        pen = QPen(QColor(245, 248, 252), max(2.0, 0.18 * f.ppm))
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.drawPolyline(QPolygonF(pts))
+
+
 def draw_dog(p, f, world, v):
     """Собака: дальние ноги темнее, туловище с пятнами, хвост, голова с ушами и мордой; в зубах -
     мяч (его рисуют игрушки); отряхивается - брызги. Вид - из сети собак (animals/dog/look.py)."""
@@ -763,6 +846,11 @@ def draw_toys(p, f, world, items):
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QColor(255, 255, 255, 120))
             p.drawEllipse(QPointF(c.x() - r * f.ppm * 0.35, c.y() - r * f.ppm * 0.35), r * f.ppm * 0.3, r * f.ppm * 0.3)
+        elif kind == "mask":
+            c = QPointF(f.X(x), f.Y(y))
+            p.setPen(QPen(QColor(20, 30, 60), max(1.0, 0.012 * f.ppm)))
+            p.setBrush(QColor(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255), 170))
+            p.drawEllipse(c, r * f.ppm, r * 0.6 * f.ppm)
         elif kind == "box":
             w, h, ang = r
             p.translate(QPointF(f.X(x), f.Y(y)))
@@ -876,7 +964,8 @@ def draw_water(p, f, world, water, t):
 
 
 def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thoughts=None, guitar=None,
-               guitar_x=None, chest_x=None, water=None, fish=None, toys=None, dog=None):
+               guitar_x=None, chest_x=None, water=None, fish=None, toys=None, dog=None, peaks=None,
+               flags=None, wind=0.0):
     f = Frame(rect, cam_x, cam_y)
     p.save()
     p.setClipRect(rect)
@@ -886,11 +975,15 @@ def draw_scene(p, rect, world, human, cam_x, cam_y, t, colors, speech=None, thou
     draw_clouds(p, f, world, t)
     draw_layer(p, f, world, world.far, FAR_PAR, 0.58, 0.3, qc(pal["far"]))
     draw_layer(p, f, world, world.mid, MID_PAR, 0.7, 0.22, qc(pal["mid"]))
+    peaks = peaks if peaks is not None else getattr(world, "mountains", None)
+    draw_far_mountains(p, f, world, peaks, flags, t, wind)
     haze = QLinearGradient(0, rect.top() + f.h * 0.45, 0, rect.top() + f.h * 0.8)
     haze.setColorAt(0, qc(pal["sky_bottom"], 0.0))
     haze.setColorAt(1, qc(pal["sky_bottom"], 0.25))
     p.fillRect(rect, haze)
     draw_ground(p, f, world, t)
+    draw_snow(p, f, world, peaks)
+    draw_summit_flags(p, f, world, peaks, flags, t, wind)
     draw_entities(p, f, world, t, human.px if human else None)
     if chest_x is not None:
         draw_chest(p, f, world, chest_x)
@@ -1092,6 +1185,10 @@ class WorldView(QWidget):
         k = 1.0 - math.exp(-dt / 0.35)
         self.cam_x += (h.px - self.cam_x) * k
         target_y = h.world.height_at(h.px) + h.body.leg()
+        if abs(h.py - target_y) > 2.0:
+            target_y = h.py                      # на стене горы, съезжает - камера за ним, а не за землёй
+        if abs(target_y - self.cam_y) > 15.0 or abs(h.px - self.cam_x) > 15.0:
+            self.cam_x, self.cam_y = h.px, target_y   # перенесли далеко - сразу туда
         self.cam_y += (target_y - self.cam_y) * (1.0 - math.exp(-dt / 0.6))
 
     def paintEvent(self, event):
@@ -1115,7 +1212,9 @@ class WorldView(QWidget):
                        chest_x=inv.chest_x if inv is not None else None, water=getattr(life, "water", None),
                        fish=getattr(life, "fish", None),
                        toys=life.toy_visuals() if hasattr(life, "toy_visuals") else None,
-                       dog=life.dog.visuals() if getattr(life, "dog", None) is not None else None)
+                       dog=life.dog.visuals() if getattr(life, "dog", None) is not None else None,
+                       flags=life.climb.flags if hasattr(life, "climb") else None,
+                       wind=life.wind.at(life.human.px, life.human.py, life.time) if hasattr(life, "wind") else 0.0)
         self.vision_rect = None
         if self.show_vision and not getattr(life, "playing", False):
             # раз в кадр, а не на каждый шаг жизни: на x8 это та же цена

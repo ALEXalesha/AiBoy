@@ -130,7 +130,59 @@ def crunch(force=1.0, size=0.05, seed=11):
     return (0.3 * force * x).astype(np.float32)
 
 
-SOUNDS = {"bark": bark, "shake": shake, "treat": crunch, "scratch": scratch, "chain": chain, "kick": thump, "throw": whoosh, "bounce": bounce, "catch": slap, "land": thump, "clack": clack,
+def fanfare(force=1.0, size=0.1, seed=12):
+    """Вершина: три восходящих тона - ура."""
+    parts = []
+    for f in (523.0, 659.0, 784.0):
+        n = int(0.14 * SR)
+        parts.append(_tone(f, n, 0.12) + 0.3 * _tone(2 * f, n, 0.06))
+    return (0.35 * force * np.concatenate(parts)).astype(np.float32)
+
+
+def flag(force=1.0, size=0.1, seed=13):
+    """Флаг воткнут: глухой стук и хлопок ткани."""
+    n = int(0.25 * SR)
+    x = _tone(140.0, n, 0.05) + 0.4 * _lowpass(_noise(n, seed), 0.3) * _env(n, attack=0.03, decay=0.08)
+    return (0.4 * force * x).astype(np.float32)
+
+
+def clink(force=1.0, size=0.05, seed=14):
+    """Крюк зацепился: металлический звон."""
+    n = int(0.2 * SR)
+    x = _tone(2200.0, n, 0.08) + 0.5 * _tone(3300.0, n, 0.05)
+    return (0.25 * force * x).astype(np.float32)
+
+
+def strike(force=1.0, size=0.05, seed=15):
+    """Удар ледоруба по камню."""
+    n = int(0.1 * SR)
+    x = _tone(900.0, n, 0.02) + 0.6 * _noise(n, seed) * _env(n, attack=0.0005, decay=0.01)
+    return (0.35 * force * x).astype(np.float32)
+
+
+def scrape(force=1.0, size=0.05, seed=16):
+    """Подтянулся: шорох по камню."""
+    n = int(0.15 * SR)
+    t = np.arange(n) / n
+    x = _lowpass(_noise(n, seed), 0.4) * np.sin(np.pi * t)
+    return (0.12 * force * x).astype(np.float32)
+
+
+def bubbles(force=1.0, size=0.05, seed=17):
+    """Пузыри из-под воды: короткие высокие бульки."""
+    n = int(0.4 * SR)
+    t = np.arange(n) / SR
+    rng = np.random.default_rng(seed)
+    x = np.zeros(n)
+    for k in range(6):
+        s0 = int(rng.uniform(0, 0.32) * SR)
+        m = min(n - s0, int(0.05 * SR))
+        f = rng.uniform(500, 1200)
+        x[s0:s0 + m] += np.sin(2 * np.pi * f * t[:m] * (1 + 2 * t[:m])) * np.exp(-t[:m] * 60)
+    return (0.25 * force * x).astype(np.float32)
+
+
+SOUNDS = {"bubbles": bubbles, "fanfare": fanfare, "flag": flag, "clink": clink, "strike": strike, "scrape": scrape, "bark": bark, "shake": shake, "treat": crunch, "scratch": scratch, "chain": chain, "kick": thump, "throw": whoosh, "bounce": bounce, "catch": slap, "land": thump, "clack": clack,
           "fall": thump, "splash": splash, "whoosh": whoosh, "pop": pop}
 
 

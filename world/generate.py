@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from world import cppn, macro, reach
+from world import cppn, macro, mountains, reach
 
 KINDS = ("tree", "bush", "stone", "flower", "mushroom", "crystal")
 DX = 0.25                     # шаг высот, м
@@ -178,6 +178,25 @@ def generate(genome, seed, width, macro_genome=None):
     while flattened < MAX_FLATTEN and not reach.escapes(heights, DX).all():
         heights = heights * 0.85
         flattened += 1
+    # горы (640 и 1280 м, world/mountains.py) - после защиты от ловушек: понижение их не трогает;
+    # лёгкий путь проходим по построению, проверка - ниже и в законах
+    relief = heights
+    peaks = mountains.plan(width, seed) if big else []
+    lowered = 0
+    if peaks:
+        # стена закрывает долине у подножия выход в одну сторону: если в другую мешает крутой
+        # холм, это ловушка - холмы (не горы) ниже на 15 % за раз, как ямы выше
+        smooth = mountains.smooth_ring(relief, DX, mountains.BASE)
+        hills_now = relief
+        while True:
+            heights, _ = mountains.apply(hills_now, peaks, width, DX)
+            if reach.escapes(heights, DX).all():
+                break
+            lowered += 1
+            if lowered > MAX_FLATTEN:
+                peaks, heights = [], relief  # не вышло проходимо - без гор (законы следят, чтобы не бывало)
+                break
+            hills_now = smooth + (hills_now - smooth) * 0.85
     tone = np.tanh(out[:, cppn.T_TONE])
     grass = sig(out[:, cppn.T_GRASS])
 
@@ -223,4 +242,22 @@ def generate(genome, seed, width, macro_genome=None):
                   clouds_amount, far, mid, clouds, entities, name_from(g[cppn.G_NAME]))
     world.flattened = flattened
     world.hills = None if hills is None else hills * 0.85 ** flattened
+    world.relief = relief                    # рельеф без гор - для замера повтора
+    world.mountains = peaks
+    world.mountain_lowered = lowered
+    world.shallow_water = False
+    if peaks:
+        # глубокая вода - стена, пока он не пловец; у стены горы долину с другой стороны уже не
+        # обойти - если глубокий пруд закрывает выход, вода в этом мире - вброд (замер: зажат
+        # между прудом в 0.94 м, уступом и стеной горы)
+        from world import water as wmod
+        deep = [q for q in wmod.ponds(world) if q.level - q.bottom > wmod.WADE]
+        if deep:
+            walls = np.array(heights, float)
+            xs_all = np.arange(n) * DX
+            for q in deep:
+                inside = ((xs_all - q.left) % width) <= ((q.right - q.left) % width)
+                walls[inside] += 50.0
+            if not reach.escapes(walls, DX).all():
+                world.shallow_water = True
     return world

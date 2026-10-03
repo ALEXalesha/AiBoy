@@ -80,6 +80,7 @@ class Walk:
     def goal(self, x):
         self._goal = None if x is None else float(x)
         self.goal_best, self.goal_way = None, 0
+        self.goal_fixed = False      # сторона задана (гора: лёгкий путь - только с одной стороны) - не обходить
 
     @property
     def looking(self):
@@ -148,7 +149,7 @@ class Walk:
             d = right if way > 0 else left
             if self.goal_best is None or d < self.goal_best[0] - 1.0:
                 self.goal_best = (d, t)
-            elif t - self.goal_best[1] > STUCK:
+            elif t - self.goal_best[1] > STUCK and not getattr(self, "goal_fixed", False):
                 self.goal_way = -way
                 self.goal_best = (1e9, t)            # заново, по новой дороге
                 way = self.goal_way

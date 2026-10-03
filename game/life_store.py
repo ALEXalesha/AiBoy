@@ -38,8 +38,25 @@ def load(body_seed, freq="sometimes", rng=None):
     return needs, pack, choice, prefs, swimmer
 
 
+def load_climb(body_seed):
+    """(навык лазания, страх) человечка."""
+    from skills.climb import Climber
+    climber = skill_store.load(body_seed, "climb", lambda: Climber(seed=int(body_seed) % (2 ** 31)))
+    fear = 0.0
+    try:
+        with open(state_path(body_seed), encoding="utf-8") as f:
+            raw = json.load(f)
+        v = raw.get("climb", {}).get("fear") if isinstance(raw, dict) else None
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and 0.0 <= v <= 1.0:
+            fear = float(v)
+    except (OSError, ValueError, AttributeError):
+        pass
+    return climber, fear
+
+
 def save(life):
-    data = {"needs": life.needs.to_dict(), "backpack": life.backpack.to_dict(), "choice": life.choice.to_dict()}
+    data = {"needs": life.needs.to_dict(), "backpack": life.backpack.to_dict(), "choice": life.choice.to_dict(),
+            "climb": life.climb.to_dict()}
     path = state_path(life.body_seed)
     try:
         tmp = path + ".tmp"
@@ -57,6 +74,8 @@ def save(life):
             ok = False
     for j in life.toy_journals.values():
         ok = j.save() and ok
+    ok = skill_store.save(life.body_seed, "climb", life.climb.climber) and ok
+    ok = save_summits(life) and ok
     return save_dog(life) and ok
 
 
@@ -117,6 +136,39 @@ def save_dog(life):
     return True
 
 
+def summits_path(world_seed):
+    return paths.user_file("worlds", str(int(world_seed)), "summits.json")
+
+
+def load_summits(world_seed):
+    """Флаги и покорённые горы мира: {"flags": [x], "conquered": [индекс]} или None."""
+    try:
+        with open(summits_path(world_seed), encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(d, dict):
+        return None
+    flags = [float(v) for v in d.get("flags", []) if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    conq = [int(v) for v in d.get("conquered", []) if isinstance(v, int) and not isinstance(v, bool) and v >= 0]
+    return {"flags": flags, "conquered": conq}
+
+
+def save_summits(life):
+    c = life.climb
+    if not c.flags and not c.conquered:
+        return True
+    try:
+        p = summits_path(life.world_seed)
+        tmp = p + ".tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            json.dump({"flags": list(c.flags), "conquered": sorted(c.conquered)}, f)
+        os.replace(tmp, p)
+    except OSError:
+        return False
+    return True
+
+
 def toy_path(body_seed, name):
     return paths.user_file("toys", str(int(body_seed)), name + ".npz")
 
@@ -127,8 +179,13 @@ def load_toys(body_seed):
     from toys import registry
     from toys.ball import BallHeads
     from animals.dog.session import TameHeads
+    from skills.climb import AxeSkill, RopeSkill
+    from acts.dive import MaskHeads
     makers = [("ball", lambda: BallHeads(seed=int(body_seed) % (2 ** 31))),
-              ("dog", lambda: TameHeads(seed=int(body_seed) % (2 ** 31)))]
+              ("dog", lambda: TameHeads(seed=int(body_seed) % (2 ** 31))),
+              ("rope", lambda: RopeSkill(seed=int(body_seed) % (2 ** 31))),
+              ("axe", lambda: AxeSkill(seed=int(body_seed) % (2 ** 31))),
+              ("mask", lambda: MaskHeads(seed=int(body_seed) % (2 ** 31)))]
     for name in registry.INPLACE:
         heads_cls = registry.inplace(name)[0]
         makers.append((name, lambda c=heads_cls: c(seed=int(body_seed) % (2 ** 31))))

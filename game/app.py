@@ -263,7 +263,9 @@ class ObservePage(Page):
                          navigator=w.navigator, guitarist=g, guitar_freq=w.settings.guitar_freq,   # гитара - в сундуке
                          choice=choice, needs=needs, backpack=pack, food_prefs=prefs, swimmer=swimmer,
                          toy_heads=life_store.load_toys(body_seed),
-                         dog_mode=w.settings.dog, dog_saved=life_store.load_dog(world_seed))
+                         dog_mode=w.settings.dog, dog_saved=life_store.load_dog(world_seed),
+                         climber=life_store.load_climb(body_seed)[0], summits=life_store.load_summits(world_seed))
+        self.life.climb.fear = life_store.load_climb(body_seed)[1]
         self.show_guitar(False)
         self.refresh_put()
         self.counted_time = self.counted_dist = 0.0

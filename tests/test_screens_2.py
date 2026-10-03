@@ -132,3 +132,36 @@ def test_stats_show_time_per_activity_and_the_favourite(win):
     page = win.stats_page
     assert page.acts.rowCount() >= 2 and "Мяч" in page.fav_line.text()
     assert "вершин - 1" in page.acts_lines.text()
+
+
+def test_deleting_the_current_world_then_entering_makes_a_new_one_in_the_gallery(win):
+    """Алексей: удалил миры в галерее, в том числе текущий, вошёл в текущий - а он на месте."""
+    obs = win.observe
+    for seed in (4, 5):
+        obs.new_world(seed=seed)
+    g = win.gallery_page
+    win.show_page("gallery")
+    old = obs.entry_id
+    old_seed = obs.life.world_seed
+    for e in list(win.gallery.entries):                     # удалить всё, и текущий тоже
+        assert g.delete_entry(e["id"], confirm=lambda _q: True)
+    assert win.gallery.entries == []
+    win.show_page("menu")
+    win.play()                                              # «Продолжить» - войти в текущий
+    assert obs.entry_id is not None and obs.entry_id != old
+    assert obs.life.world_seed != old_seed
+    ids = [e["id"] for e in win.gallery.entries]
+    assert ids == [obs.entry_id]                            # новый мир - в галерее
+    win.show_page("gallery")
+    assert list(g.cards) == [obs.entry_id]
+
+
+def test_deleting_another_world_keeps_the_current_one(win):
+    obs = win.observe
+    obs.new_world(seed=4)
+    other = obs.entry_id
+    obs.new_world(seed=5)
+    cur, seed = obs.entry_id, obs.life.world_seed
+    assert win.gallery_page.delete_entry(other, confirm=lambda _q: True)
+    win.show_page("observe")
+    assert obs.entry_id == cur and obs.life.world_seed == seed

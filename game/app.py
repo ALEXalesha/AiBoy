@@ -299,6 +299,12 @@ class ObservePage(Page):
             seed = int(self.rng.integers(1, 2 ** 31 - 1))
         return seed
 
+    def on_show(self):
+        # текущий мир удалён из галереи - войти в него нельзя: новый мир, и он попадает в галерею
+        # (Алексей: удалил миры, в том числе текущий, вошёл - а он на месте)
+        if self.life is not None and (self.entry_id is None or self.window_.gallery.get(self.entry_id) is None):
+            self.new_world()
+
     def new_world(self, seed=None):
         m = self.window_.models
         body = self.life.body_seed if self.life else self.fresh_seed(

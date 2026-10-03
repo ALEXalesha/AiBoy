@@ -22,7 +22,10 @@ ROOT = os.path.abspath(os.path.dirname(__file__))
 
 # Игре не нужны: без них сборка меньше. PIL нужен только build.py - для иконки.
 EXCLUDE = ("torch", "torchvision", "scipy", "sklearn", "matplotlib", "PIL", "IPython", "notebook",
-           "pandas", "pytest", "tkinter", "pygame", "PySide6.QtMultimediaWidgets")
+           "pandas", "pytest", "tkinter", "pygame", "PySide6.QtMultimediaWidgets", "pymunk.examples", "pymunk.tests",
+           "pyglet")
+HIDDEN = ("pymunk._chipmunk", "_cffi_backend")
+COLLECT = ("toys", "animals", "acts", "skills", "world", "physics", "body", "music", "sound")
 # Голоса нет, а гитаре (1.1.0) нужен только QAudioSink: Qt6Multimedia и бэкенд windows. Пять
 # библиотек ffmpeg и его плагин - нет (game/audio.py выбирает бэкенд windows).
 # PyInstaller кладёт библиотеки Qt по зависимостям плагинов - они убираются после сборки.
@@ -71,6 +74,13 @@ def run_pyinstaller(console=False):
     args += ["--console"] if console else ["--windowed"]
     for module in EXCLUDE:
         args += ["--exclude-module", module]
+    # 2.0: физика pymunk - ядро chipmunk в _chipmunk.pyd, грузится через cffi; примеры и тесты не нужны
+    for module in HIDDEN:
+        args += ["--hidden-import", module]
+    # игрушки реестр подгружает по имени (importlib) - PyInstaller таких импортов не видит
+    # (самопроверка exe: «No module named 'toys.flying'»); пакеты игры - целиком
+    for package in COLLECT:
+        args += ["--collect-submodules", package]
     args.append(os.path.join(ROOT, "main.py"))
     subprocess.run(args, check=True, cwd=ROOT)
 

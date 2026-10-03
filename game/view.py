@@ -330,6 +330,13 @@ def _capsule(p, a, b, width, color):
     p.drawLine(a, b)
 
 
+def foot_angle(dx, dy, facing):
+    """Поворот стопы (градусы Qt) по голени (dx, dy в точках экрана, y вниз): носком вперёд, куда смотрит."""
+    # голень вниз (90°): вправо - поворот на -90°, влево - на +90°. Было ещё «+180 при facing -1» -
+    # два зеркала гасили друг друга, и носки всегда смотрели вправо (Алексей: «ноги смотрят вправо»)
+    return math.degrees(math.atan2(dy, dx)) - 90 * facing
+
+
 def draw_human(p, f, human, t, speaking=0.0, guitar=None):
     """guitar: None - без гитары, "back" - за спиной, "play" - играет (сидит)."""
     b = human.body
@@ -351,12 +358,9 @@ def draw_human(p, f, human, t, speaking=0.0, guitar=None):
         _capsule(p, P(pts["kn_" + side]), P(pts["ft_" + side]), b.leg_w * m * 0.95, qc(b.pants, 1, k))
         foot = P(pts["ft_" + side])
         knee = P(pts["kn_" + side])
-        # стопа - по направлению голени, носком вперёд
-        dx, dy = foot.x() - knee.x(), foot.y() - knee.y()
-        ang = math.degrees(math.atan2(dy, dx)) - 90 * human.facing
         p.save()
         p.translate(foot)
-        p.rotate(ang if human.facing > 0 else ang + 180)
+        p.rotate(foot_angle(foot.x() - knee.x(), foot.y() - knee.y(), human.facing))
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(qc(b.shoes, 1, k))
         L, H = 0.24 * m, 0.085 * m

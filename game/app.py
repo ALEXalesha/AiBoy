@@ -220,7 +220,8 @@ class ObservePage(Page):
         self.vision_button.setCheckable(True)
         self.vision_button.setChecked(s.show_vision)
         col.addWidget(self.vision_button)
-        # пока он гуляет с гитарой за спиной; когда играет - такая же кнопка у 👍/👎
+        # «Положи ...» - пока он держит вещь (гитару за спиной, игрушку, снаряжение); когда играет на
+        # гитаре - такая же кнопка у 👍/👎
         self.put_button = button("Положи гитару", None, lambda: self.ask_put())
         self.put_button.setToolTip("Просьба, а не команда: он решает сам")
         self.put_button.hide()
@@ -387,12 +388,12 @@ class ObservePage(Page):
             return 1
         return self.speed
 
-    def ask_put(self):
-        """«Положи гитару»: просьба к нему; ответ - в чат от сети речи."""
+    def ask_put(self, name=None):
+        """«Положи ...»: просьба к нему про вещь в руках; ответ - в чат от сети речи."""
         life = self.life
         if life is None:
             return None
-        res = life.ask_put()
+        res = life.ask_put(name)
         if res is None:
             return None
         agree, events = res
@@ -402,11 +403,19 @@ class ObservePage(Page):
         return agree
 
     def refresh_put(self):
-        """Кнопки «Положи гитару» активны, только пока гитара у него в руках или за спиной."""
-        on = self.life is not None and self.life.has_guitar
-        self.guitar_panel.put.setEnabled(on)
-        self.put_button.setEnabled(on)
-        self.put_button.setVisible(on and not self.life.playing)
+        """Кнопка «Положи ...» - по настоящему положению вещей: видна, только пока он держит вещь
+        (раньше обновлялась лишь по четырём событиям гитары и висела, когда гитару клали иначе)."""
+        from toys import registry as toy_registry
+        life = self.life
+        held = life.inv.carried if life is not None else None
+        self.guitar_panel.put.setEnabled(held == "guitar")
+        show = held is not None and not (held == "guitar" and life.playing)
+        if show:
+            text = "Положи " + toy_registry.accusative(held)
+            if self.put_button.text() != text:
+                self.put_button.setText(text)
+        self.put_button.setEnabled(show)
+        self.put_button.setVisible(show)
 
     def after_rating(self, rating):
         """Оценка законченной попытке (в идущую попадёт вместе с попыткой - add_attempt)."""
@@ -556,13 +565,14 @@ class ObservePage(Page):
                 w.stats.add_life_event(kind, data)
             elif kind in ("toy_done", "put_toy"):
                 self.save_guitar()
-            if kind in ("pickup", "put", "sit", "stand"):
+            if kind in ("pickup", "put", "sit", "stand", "put_toy", "pickup_toy", "toy_start", "toy_done"):
                 self.refresh_put()
 
     def refresh_panel(self):
         life = self.life
         if life is None:
             return
+        self.refresh_put()
         self.world_name.setText(life.world.name)
         self.human_name.setText(f"человечек {life.body.name}")
         want = self.effective_speed()

@@ -74,3 +74,12 @@ def inplace(name):
         return None
     mod = importlib.import_module(spec[0])
     return getattr(mod, spec[1]), getattr(mod, spec[2])
+
+
+# «Положи ...» - винительный падеж (кнопка просьбы положить вещь, у каждой вещи своя)
+ACCUSATIVE = {"guitar": "гитару", "rod": "удочку", "rope": "верёвку", "mask": "маску"}
+
+
+def accusative(name):
+    t = TOYS.get(name)
+    return ACCUSATIVE.get(name) or (t.title.lower() if t is not None else name)

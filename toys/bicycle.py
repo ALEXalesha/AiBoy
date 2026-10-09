@@ -77,6 +77,22 @@ class Bike:
         self.motor.rate = self.facing * pedal * MAX_RATE
         self.frame.center_of_gravity = (self.facing * 0.25 * lean, 0.15)
 
+    def unsink(self, ground):
+        """Вытолкнуть наверх колесо или раму, проскочившие сквозь рельеф.
+
+        Рельеф - отрезки толщиной 5 см, и на крутом склоне колесо, падая вместе с рамой,
+        проскакивало сквозь отрезок и оставалось внутри холма (Алексей: «заезжает в текстуры»,
+        замер 09.10 - до 0,88 м). Тело, ушедшее центром ниже своей опоры, ставится на
+        поверхность, и движение вглубь гасится."""
+        for body, lift in ((self.rear, WHEEL_R), (self.front, WHEEL_R), (self.frame, 0.15)):
+            x, y = body.position
+            g = ground(x)
+            if y < g + lift:
+                body.position = (x, g + lift)
+                vx, vy = body.velocity
+                if vy < 0:
+                    body.velocity = (vx, 0.0)
+
     def angle(self):
         """Наклон рамы: плюс - задрал переднее колесо."""
         return self.facing * self.frame.angle
@@ -140,6 +156,7 @@ class RideAttempt:
                 events.append(("sound", "chain", 0.2 * self.cmd[0], 0.1))
         self.phys.follow(self.bike.x)
         self.phys.step(dt)
+        self.bike.unsink(self.ctx.ground)
         y = float(self.bike.frame.position.y)
         self.climb += max(0.0, y - self.last_y)
         self.last_y = y

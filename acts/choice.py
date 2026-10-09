@@ -36,6 +36,9 @@ MIN_ATTEMPTS = 3
 MIN_WORLD = 20.0            # с
 MIN_PLAY = 90.0             # с - с игрушкой не меньше (пузыри, падения с велосипеда - три попытки за 20 с:
                             # он прыгал с игрушки на игрушку, медиана сеанса 1.5 мин; гитара - как в 1.1.0)
+GUITAR_HALF = 3.5           # мин - у гитары (при «Как часто: иногда») половина тяги уходит быстрее, чем у
+                            # игрушек (5): Алексей, 2.0 - «слишком любит гитару, ПРЯМ ОЧЕНЬ, пусть быстрее устаёт»
+GUITAR_BIAS = -0.05         # ... и берёт её реже: тяга гитары ниже на столько при той же «нравится»
 NEW_TOY = 0.42              # «нравится» игрушки, в которую ещё не играл: любопытно, но не сильнее знакомой
 URGENT = 0.8                # нужда выше - гистерезис не держит
 T = 0.02                    # температура выбора
@@ -87,7 +90,7 @@ class Choice:
         self.mood = 0.0              # -1..1
         self._pending = {}           # сохранённое для занятий, которых ещё нет (игрушки, собака)
         self.freq = freq
-        self.add("guitar", HALF["sometimes"])
+        self.add("guitar", GUITAR_HALF)
         for n in NEEDS:
             self.acts[n] = Activity(n, 60.0, liking=0.0, need=True)
         self.add("swim", 5.0, liking=0.45)
@@ -99,20 +102,20 @@ class Choice:
     @freq.setter
     def freq(self, value):
         """«Как часто» - всем играм (спецификация 2.0, раздел 10): как быстро надоедает (половина
-        тяги - за base_half x HALF/HALF[sometimes]) и сдвиг тяги. У гитары base_half 5 - те же
-        3.5 / 5 / 7 минут, что в 1.1.0."""
+        тяги - за base_half x HALF/HALF[sometimes]) и сдвиг тяги. У гитары base_half GUITAR_HALF (3.5):
+        с 2.0 она надоедает быстрее игрушек - 2.45 / 3.5 / 4.9 минуты - и тянет на GUITAR_BIAS слабее."""
         self._freq = value if value in HALF else "sometimes"
         for a in getattr(self, "acts", {}).values():
             if a.play:
                 a.half = a.base_half * HALF[self._freq] / HALF["sometimes"]
-                a.bias = BIAS[self._freq]
+                a.bias = BIAS[self._freq] + (GUITAR_BIAS if a.name == "guitar" else 0.0)
 
     def add(self, name, half_min, liking=0.5, bias=None):
         if name not in self.acts:
             a = Activity(name, half_min, liking, 0.0, play=True)
             self.acts[name] = a
             a.half = half_min * HALF[self.freq] / HALF["sometimes"]
-            a.bias = BIAS[self.freq] if bias is None else bias
+            a.bias = (BIAS[self.freq] + (GUITAR_BIAS if name == "guitar" else 0.0)) if bias is None else bias
             self._restore(name, self._pending.pop(name, None))
         return self.acts[name]
 

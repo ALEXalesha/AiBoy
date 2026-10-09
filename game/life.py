@@ -1163,24 +1163,42 @@ class Life:
         leave = c.acts["explore"].pull()
         return self.rng.random() < 1.0 / (1.0 + math.exp(-(leave - carry) / PUT_T))
 
-    def ask_put(self):
-        """«Положи гитару» от владельца - просьба: согласие тем вероятнее, чем меньше ему сейчас
-        хочется играть. Возвращает (согласился, события) или None, если гитары у него нет."""
-        if not self.has_guitar or self.stopped:
+    def ask_put(self, name=None):
+        """«Положи ...» от владельца - просьба про вещь, которую он держит (гитара, игрушка, снаряжение):
+        согласие тем вероятнее, чем меньше ему сейчас хочется ею заниматься (тяга занятия, плюс STICK,
+        если он прямо сейчас с ней играет, против прогулки). Возвращает (согласился, события) или None,
+        если этой вещи у него в руках нет (или он в воде, на стене)."""
+        held = self.inv.carried
+        name = name or held
+        if (self.stopped or name is None or held != name or self.swim.mode is not None
+                or self.climb.mode is not None):
             return None
         c = self.choice
-        g = c.acts["guitar"].pull() + (STICK if self.playing else 0.0)
+        act = {"rope": "climb", "axe": "climb", "mask": "dive"}.get(name, name)
+        busy = (self.playing if name == "guitar" else
+                (self.toy is not None and self.toy.name == name) or c.current == act)
+        g = (c.acts[act].pull() if act in c.acts else 0.0) + (STICK if busy else 0.0)
         e = c.acts["explore"].pull()
         agree = self.rng.random() < 1.0 / (1.0 + math.exp((g - e) / ASK_T))
         events = []
         playing = self.playing
         if agree:
-            if playing:
-                self.attempt = None              # идущая попытка брошена без записи
-                self.stand_up()
-                events.append(("stand",))
-            self.put_guitar()
-            events.append(("put",))
+            if name == "guitar":
+                if playing:
+                    self.attempt = None          # идущая попытка брошена без записи
+                    self.stand_up()
+                    events.append(("stand",))
+                self.put_guitar()
+                events.append(("put",))
+            else:
+                if self.toy is not None and self.toy.name == name:
+                    self.toy.stop()              # идущая игра брошена: положил - не играет
+                    self.toy = None
+                    events.append(("toy_done", name))
+                if c.current == act:
+                    c.switch("explore")
+                self.put_held()
+                events.append(("put_toy", name))
         self.music_flags = {"asked_put": 1.0, "agreed": 1.0 if agree else 0.0, "refused": 0.0 if agree else 1.0,
                             "playing": 1.0 if (playing and not agree) else 0.0}
         events.append(("phrase", self.say()))

@@ -18,7 +18,7 @@ def test_boredom_takes_half_the_pull_in_half_minutes_and_fades_away_after():
     c = Choice("sometimes", np.random.default_rng(0))
     c.switch("guitar")
     g = c.acts["guitar"]
-    for _ in range(int(ch.HALF["sometimes"] * 60 / 0.5)):
+    for _ in range(int(ch.GUITAR_HALF * 60 / 0.5)):
         c.tick(0.5)
     assert g.boredom == pytest.approx(0.5, abs=0.02)
     c.switch("explore")
@@ -63,7 +63,8 @@ def test_often_is_longer_and_stronger_than_rare():
         assert often.acts[n].half > rare.acts[n].half          # «Как часто» - всем играм
         assert often.acts[n].pull() > rare.acts[n].pull()
     assert rare.acts["explore"].half == often.acts["explore"].half
-    assert rare.acts["guitar"].half == 3.5 and often.acts["guitar"].half == 7.0   # как в 1.1.0
+    # с 2.0 гитара надоедает быстрее игрушек: 3.5 x 3.5/5 и 3.5 x 7/5 (в 1.1.0 было 3.5 и 7)
+    assert rare.acts["guitar"].half == pytest.approx(2.45) and often.acts["guitar"].half == pytest.approx(4.9)
     rare.freq = "often"
     assert rare.acts["guitar"].half == often.acts["guitar"].half and rare.acts["ball"].half == often.acts["ball"].half
 
@@ -104,7 +105,9 @@ def sometimes():
 def test_every_guitar_session_ends_by_itself_in_reasonable_time(sometimes):
     runs = [r[0] for r in sometimes]
     lengths = [s["length"] / 60 for out in runs for s in out if not s.get("unfinished")]
-    assert lengths and 2.0 <= float(np.median(lengths)) <= 6.0, lengths
+    # нижняя граница - против «сел и встал от шума» (без STICK было 0.5 мин); с 2.0 гитара надоедает
+    # быстрее игрушек (Алексей: «слишком любит гитару»), медиана ~1.75 мин, поэтому 1.5, а не 2.0
+    assert lengths and 1.5 <= float(np.median(lengths)) <= 6.0, lengths
     assert max(s["length"] / 60 for out in runs for s in out) <= 12.0
     assert all(s["attempts"] >= ch.MIN_ATTEMPTS for out in runs for s in out if not s.get("unfinished"))
 

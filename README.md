@@ -96,6 +96,15 @@ The owner wanted the little person to have more to do than the guitar, to choose
 - **Boredom.** The guitar gets boring now: there is one boredom for every activity. Half an hour used to be 4 guitar sessions of 27 minutes; now it is 16-22 sessions with a median of 2-3 minutes.
 - **Requests.** «Положи» (put it down) is a request he may turn down.
 
+**Fixed after the 2.0 review.**
+
+- «Предложить» (offer) works for every toy: when he agrees, he plays with it at once.
+- «Положить ...» (put down) shows for whatever he holds, and only while he holds it; in the middle of a game he is harder to talk into it.
+- Walking left, the whole figure is mirrored, feet included.
+- Deleting the current world in the gallery and entering it starts a new world, and it shows in the gallery.
+- The bicycle no longer sinks into a steep slope (a wheel used to slip up to 0.88 m into the hill).
+- He loves the guitar less: half its pull goes in 3.5 minutes instead of 5, and it pulls weaker at the same liking.
+
 **A chest and eight toys** run on pymunk physics. Each has its own network head, journal and learning law. Median success, first attempts against later ones:
 
 | Toy | First | Later |
@@ -165,7 +174,7 @@ From source (Python 3.11+, numpy, PySide6, pymunk 7.3): `pip install -r requirem
 
 ## Tests
 
-`python -m pytest` - 560 tests (334 in 1.1.0, 208 in 1.0.0); the learning laws and the 30-minute session laws make a full run take about an hour. They cover gradients, world seeds, the seamless ring and the no-trap law, body limits, physics (the stance leg moves the body, turning on the spot goes nowhere, smooth joints), the brain, speech, the trained models' behaviour (calm, still walking, climbs out of hollows), "no voice" (only the guitar uses QtMultimedia), the guitar, and the whole window driven without a screen. A mutation check broke the code on purpose 20 times (8 in the first build, 12 for the owner's fixes); four of the new breaks first survived, the tests were strengthened, and now every one turns them red. The guitar added 21 more deliberate breaks (a detuned string, no limiter, free extra notes, no silence penalty, a taste blind to similarity, a journal losing its first attempts, mood and hands rules, x8 while playing, the walking brain stepping while he plays, trusting the taste blindly, a self-check that does not save, a guitar that is not drawn): three survived at first, the tests were extended, and all 21 are caught now. The guitar tests include a learning law: over 200 attempts the median similarity of the last 20 beats the first 20 by at least 0.2. Version 2.0 added deliberate breaks for each task:
+`python -m pytest` - 627 tests (334 in 1.1.0, 208 in 1.0.0); the learning laws and the 30-minute session laws make a full run take about an hour. They cover gradients, world seeds, the seamless ring and the no-trap law, body limits, physics (the stance leg moves the body, turning on the spot goes nowhere, smooth joints), the brain, speech, the trained models' behaviour (calm, still walking, climbs out of hollows), "no voice" (only the guitar uses QtMultimedia), the guitar, and the whole window driven without a screen. A mutation check broke the code on purpose 20 times (8 in the first build, 12 for the owner's fixes); four of the new breaks first survived, the tests were strengthened, and now every one turns them red. The guitar added 21 more deliberate breaks (a detuned string, no limiter, free extra notes, no silence penalty, a taste blind to similarity, a journal losing its first attempts, mood and hands rules, x8 while playing, the walking brain stepping while he plays, trusting the taste blindly, a self-check that does not save, a guitar that is not drawn): three survived at first, the tests were extended, and all 21 are caught now. The guitar tests include a learning law: over 200 attempts the median similarity of the last 20 beats the first 20 by at least 0.2. Version 2.0 added deliberate breaks for each task:
 
 - stopping the world: 10 of 11 caught, and the survivor is equivalent;
 - pymunk ground: 4 of 4;

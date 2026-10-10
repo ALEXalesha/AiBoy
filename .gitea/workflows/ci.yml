@@ -23,7 +23,9 @@ jobs:
   tests:
     name: Проверки
     runs-on: windows
-    timeout-minutes: 20
+    # 2.0: 627 тестов, законы обучения и сеансы на 30 минут жизни - полный прогон около часа
+    # (в 1.1.0 было 9 минут, и 20 минут 2.0 обрывали на 22 %).
+    timeout-minutes: 120
     env:
       OPENBLAS_NUM_THREADS: "4"
       OMP_NUM_THREADS: "4"
